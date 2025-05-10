@@ -642,6 +642,10 @@ class PetWidget(QWidget):
         self.stop_thread('Interaction') # 停止交互线程
         self.stop_thread('Scheduler') # 停止计划线程
 
+        # 清除可能存在的旧对话框
+        self._set_dialogue_dp('None')
+        settings.showing_dialogue_now = False
+
         # 步骤 2: 加载并初始化新宠物的配置和资源
         self.init_conf(pet_name)
 
