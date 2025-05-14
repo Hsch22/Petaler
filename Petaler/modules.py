@@ -6,6 +6,11 @@ import inspect
 import types
 from datetime import datetime, timedelta
 
+# 新增导入
+import asyncio
+import geocoder
+import python_weather
+
 from apscheduler.schedulers.qt import QtScheduler
 from apscheduler.triggers import interval, date, cron
 
@@ -28,10 +33,13 @@ class Animation_worker(QObject):
     负责根据宠物配置随机播放动画，并在独立的线程中运行。
     通过信号与主线程（通常是UI线程）通信以更新图像和位置。
     """
+
     # --- 信号定义 ---
-    sig_setimg_anim = pyqtSignal(name='sig_setimg_anim')       # 请求设置新图像的信号
-    sig_move_anim = pyqtSignal(float, float, name='sig_move_anim') # 请求移动宠物的信号 (dx, dy)
-    sig_repaint_anim = pyqtSignal(name='sig_repaint_anim')    # 请求重绘的信号
+    sig_setimg_anim = pyqtSignal(name='sig_setimg_anim')  # 请求设置新图像的信号
+    sig_move_anim = pyqtSignal(
+        float, float, name='sig_move_anim'
+    )  # 请求移动宠物的信号 (dx, dy)
+    sig_repaint_anim = pyqtSignal(name='sig_repaint_anim')  # 请求重绘的信号
 
     def __init__(self, pet_conf: PetConfig, parent: Optional[QObject] = None) -> None:
         """
@@ -55,7 +63,7 @@ class Animation_worker(QObject):
 
             # 检查是否需要暂停或已终止
             if self._check_pause_kill():
-                break # 如果在暂停期间被终止，则退出循环
+                break  # 如果在暂停期间被终止，则退出循环
 
             # 如果没有被终止，则按配置的间隔休眠
             if not self.is_killed:
@@ -65,7 +73,7 @@ class Animation_worker(QObject):
 
     def kill(self) -> None:
         """标记线程为终止状态，并确保其不处于暂停状态。"""
-        self.is_paused = False # 确保解除暂停状态，以便线程能检查 is_killed
+        self.is_paused = False  # 确保解除暂停状态，以便线程能检查 is_killed
         self.is_killed = True
 
     def pause(self) -> None:
@@ -82,10 +90,10 @@ class Animation_worker(QObject):
         如果线程被暂停，则循环等待直到恢复或被终止。
         """
         while self.is_paused:
-            if self.is_killed: # 在暂停期间也检查终止标记
+            if self.is_killed:  # 在暂停期间也检查终止标记
                 return True
-            time.sleep(0.2) # 暂停时短暂休眠，避免CPU空转
-        return self.is_killed # 返回当前的终止状态
+            time.sleep(0.2)  # 暂停时短暂休眠，避免CPU空转
+        return self.is_killed  # 返回当前的终止状态
 
     def random_act(self) -> None:
         """
@@ -96,7 +104,10 @@ class Animation_worker(QObject):
         # 根据概率分布选择动作索引
         prob_num = random.uniform(0, 1)
         # 计算累积概率，找到第一个大于 prob_num 的区间的索引
-        act_index = sum(int(prob_num > self.pet_conf.act_prob[i]) for i in range(len(self.pet_conf.act_prob)))
+        act_index = sum(
+            int(prob_num > self.pet_conf.act_prob[i])
+            for i in range(len(self.pet_conf.act_prob))
+        )
 
         # 获取选中的动作序列 (可能包含一个或多个动作 Act)
         acts: List[Act] = self.pet_conf.random_act[act_index]
@@ -104,13 +115,12 @@ class Animation_worker(QObject):
         # 执行选中的动作序列
         self._run_acts(acts)
 
-
     def _run_acts(self, acts: List[Act]) -> None:
         """
         按顺序执行一个动作序列中的所有单个动作 (Act)。
         """
         for act in acts:
-            if self.is_killed: # 在每个动作开始前检查终止状态
+            if self.is_killed:  # 在每个动作开始前检查终止状态
                 break
             self._run_act(act)
 
@@ -121,27 +131,27 @@ class Animation_worker(QObject):
         """
         # 一个动作可能重复执行多次 (act.act_num)
         for _ in range(act.act_num):
-            if self._check_pause_kill(): 
-                return # 检查暂停/终止，如果终止则直接返回
+            if self._check_pause_kill():
+                return  # 检查暂停/终止，如果终止则直接返回
 
             # 遍历动作中的每一帧图像
             for img in act.images:
-                if self._check_pause_kill(): 
-                    return # 检查暂停/终止，如果终止则直接返回
+                if self._check_pause_kill():
+                    return  # 检查暂停/终止，如果终止则直接返回
 
                 # --- 更新图像 ---
                 # 注意：直接修改全局 settings 模块中的图像变量
                 settings.previous_img = settings.current_img
                 settings.current_img = img
-                self.sig_setimg_anim.emit() # 发送信号，请求UI更新图像
+                self.sig_setimg_anim.emit()  # 发送信号，请求UI更新图像
 
                 # --- 帧间延迟 ---
                 time.sleep(act.frame_refresh)
 
-                self._move(act) # 总是尝试根据动作信息移动
+                self._move(act)  # 总是尝试根据动作信息移动
 
                 # --- 请求重绘 ---
-                self.sig_repaint_anim.emit() # 发送信号，请求UI重绘
+                self.sig_repaint_anim.emit()  # 发送信号，请求UI重绘
 
     def _static_act(self, pos: QPoint) -> None:
         """
@@ -165,23 +175,22 @@ class Animation_worker(QObject):
         new_y = pos.y()
 
         # 简单的边界碰撞检查
-        if pos.x() < border_x: 
+        if pos.x() < border_x:
             new_x = screen_width - border_x
         elif pos.x() > screen_width - border_x:
             new_x = border_x
 
-        if pos.y() < border_y: 
+        if pos.y() < border_y:
             new_y = screen_height - border_y
-        elif pos.y() > screen_height - border_y: 
+        elif pos.y() > screen_height - border_y:
             new_y = border_y
 
         # 如果位置需要调整，则发送移动信号
         if new_x != pos.x() or new_y != pos.y():
-             # 计算相对移动量
-             dx = new_x - pos.x()
-             dy = new_y - pos.y()
-             self.sig_move_anim.emit(float(dx), float(dy))
-
+            # 计算相对移动量
+            dx = new_x - pos.x()
+            dy = new_y - pos.y()
+            self.sig_move_anim.emit(float(dx), float(dy))
 
     def _move(self, act: Act) -> None:
         """
@@ -189,10 +198,10 @@ class Animation_worker(QObject):
         """
         plus_x: float = 0.0
         plus_y: float = 0.0
-        direction = act.direction # 获取动作定义的方向
+        direction = act.direction  # 获取动作定义的方向
 
-        if direction: # 仅当方向有效时才计算位移
-            move_amount = float(act.frame_move) # 每帧的移动量
+        if direction:  # 仅当方向有效时才计算位移
+            move_amount = float(act.frame_move)  # 每帧的移动量
             if direction == 'right':
                 plus_x = move_amount
             elif direction == 'left':
@@ -203,15 +212,15 @@ class Animation_worker(QObject):
                 plus_y = move_amount
         # 仅当有实际位移时才发出信号（可选优化）
         if plus_x != 0.0 or plus_y != 0.0:
-            self.sig_move_anim.emit(plus_x, plus_y) # 发送移动信号 (dx, dy)
-
-
+            self.sig_move_anim.emit(plus_x, plus_y)  # 发送移动信号 (dx, dy)
 
 
 import math
+
 # 导入 PyQt5 相关模块
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal, QPoint
 from PyQt5.QtGui import QPixmap
+
 # 导入自定义的设置和动作类 (假定存在)
 # from Pet import settings, QAction # QAction 可能与 PyQt5.QtWidgets.QAction 冲突，需确认其来源
 # 假设 settings 是一个可全局访问的配置/状态对象
@@ -230,6 +239,7 @@ from PyQt5.QtGui import QPixmap
 # settings.fall_right: 标志位，表示掉落时图像是否需要水平镜像
 # settings.dragspeedx: x 轴拖拽/掉落速度
 # settings.dragspeedy: y 轴拖拽/掉落速度
+
 
 class Interaction_worker(QObject):
     """
@@ -335,7 +345,9 @@ class Interaction_worker(QObject):
         # math.ceil 确保至少重复一次
         n_repeat = math.ceil(act.frame_refresh / (self.pet_conf.interact_speed / 1000))
         # 创建一个扩展的图像列表，其中每个图像根据 n_repeat 重复，整个序列根据 act.act_num 重复
-        img_list_expand = [item for item in act.images for i in range(n_repeat)] * act.act_num
+        img_list_expand = [
+            item for item in act.images for i in range(n_repeat)
+        ] * act.act_num
         # 从扩展列表中获取当前 playid 对应的图像
         img = img_list_expand[settings.playid]
 
@@ -372,7 +384,9 @@ class Interaction_worker(QObject):
             # 获取当前要执行的动作对象
             act = acts[settings.act_id]
             # 计算当前动作需要执行的总帧数 (考虑图像重复和动作次数)
-            n_repeat = math.ceil(act.frame_refresh / (self.pet_conf.interact_speed / 1000))
+            n_repeat = math.ceil(
+                act.frame_refresh / (self.pet_conf.interact_speed / 1000)
+            )
             n_repeat *= len(act.images) * act.act_num
 
             # 计算并设置当前帧图像
@@ -411,7 +425,6 @@ class Interaction_worker(QObject):
                 self.act_name = None
                 # 重置播放帧索引
                 settings.playid = 0
-
 
         # 情况 2: 掉落行为已启用 (settings.set_fall == 1) 且宠物不在地面上 (settings.onfloor == 0)
         elif settings.set_fall == 1 and settings.onfloor == 0:
@@ -459,7 +472,7 @@ class Interaction_worker(QObject):
         """
 
         # 获取当前的垂直速度作为本次的 y 轴位移增量
-        plus_y = settings.dragspeedy 
+        plus_y = settings.dragspeedy
         # 获取当前的水平速度作为本次的 x 轴位移增量
         plus_x = settings.dragspeedx
         # 更新垂直速度，模拟重力加速度
@@ -468,14 +481,14 @@ class Interaction_worker(QObject):
         # 发出移动信号，请求主界面根据计算出的位移移动宠物
         self.sig_move_inter.emit(plus_x, plus_y)
 
-    def _move(self, act) -> None: 
+    def _move(self, act) -> None:
         """
         根据动作(act)对象中定义的方和移动量，计算并发出移动信号。
         """
 
         # 初始化 x, y 轴位移量
-        plus_x = 0.
-        plus_y = 0.
+        plus_x = 0.0
+        plus_y = 0.0
         # 获取动作定义的方向
         direction = act.direction
 
@@ -517,6 +530,62 @@ class Scheduler_worker(QObject):
     # 请求设置时间显示 (时间类型标识, 剩余时间/数值)
     sig_settime_sche = pyqtSignal(str, int, name='sig_settime_sche')
 
+    # _get_city_from_gaode 方法将被完全删除
+    # (下面的空行代表原方法位置，将被删除)
+
+    # 新增异步获取天气信息的方法
+    async def _get_weather_string(self):
+        city_for_weather = None
+        try:
+            # --- 恢复使用 geocoder IP 定位代码 ---
+            print("正在尝试通过 geocoder.ip('me') 获取地理位置...")
+            g = geocoder.ip('me')
+            if g.ok and g.city:
+                print(f"Geocoder 定位城市: {g.city}")
+                city_for_weather = g.city
+            else:
+                print("Geocoder IP定位失败或未返回城市信息。")
+            # --- geocoder 逻辑结束 ---
+
+            if city_for_weather:
+                print(f"最终用于查询天气的城市: {city_for_weather}")
+                async with python_weather.Client(unit=python_weather.METRIC) as client:
+                    weather = await client.get(city_for_weather)
+                    return f"当前城市：{city_for_weather}，天气：{weather.description}，温度：{weather.temperature}°C"
+            else:
+                return "未能获取到有效城市信息，无法查询天气。"
+
+        except AttributeError as e:
+            # 处理属性可能仍然缺失或名称不同的情况
+            print(f"获取天气属性时出错: {e}. 尝试访问 forecasts[0] ...")
+            try:
+                # 备选方案: 尝试从第一个预报条目获取当前状况
+                # 这里假设 'weather' 可能是一个带有 'forecasts' 列表的 Forecast 对象
+                # 或者主 weather 对象有一个 'forecasts' 属性。
+                if hasattr(weather, 'forecasts') and weather.forecasts:
+                    first_forecast = weather.forecasts[0]
+                    # 现在，尝试从 first_forecast 或其 hourly 子预报中获取温度和描述
+                    current_temp = first_forecast.temperature
+                    current_desc = (
+                        first_forecast.description
+                    )  # 或从 hourly[0].description 获取
+
+                    # 如果 first_forecast 本身没有直接的 temp/desc，检查其 hourly 预报
+                    if (
+                        not hasattr(first_forecast, 'temperature')
+                        and hasattr(first_forecast, 'hourly')
+                        and first_forecast.hourly
+                    ):
+                        current_temp = first_forecast.hourly[0].temperature
+                        current_desc = first_forecast.hourly[0].description
+
+                    return f"当前城市：{city_for_weather}，天气：{current_desc}，温度：{current_temp}°C"
+                else:
+                    return f"获取天气信息失败: 无法从预报数据中提取当前天气 ({e})"
+            except Exception as fallback_e:
+                return f"获取天气信息失败 (备选方案尝试失败): {fallback_e}"
+        except Exception as e:
+            return f"获取天气信息失败: {e}"
 
     def __init__(self, pet_conf, parent=None):
         """
@@ -541,20 +610,60 @@ class Scheduler_worker(QObject):
         self.tomato_timeleft = 0
 
         self.scheduler = QtScheduler()
-        self.scheduler.add_job(self.change_hp, interval.IntervalTrigger(minutes=self.pet_conf.hp_interval))
-        self.scheduler.add_job(self.change_em, interval.IntervalTrigger(minutes=self.pet_conf.em_interval))
+        self.scheduler.add_job(
+            self.change_hp, interval.IntervalTrigger(minutes=self.pet_conf.hp_interval)
+        )
+        self.scheduler.add_job(
+            self.change_em, interval.IntervalTrigger(minutes=self.pet_conf.em_interval)
+        )
         self.scheduler.start()
-
 
     def run(self):
         """
         工作线程的入口点。
-        当前实现：仅在启动时执行一次问候。
+        修改为：先显示基本问候，然后获取并显示天气信息。
         """
-
         now_time = datetime.now().hour
-        greet_text = self.greeting(now_time)
-        self.show_dialogue([greet_text])
+
+        # 1. 准备并显示基本问候语
+        base_greeting_text = ""
+        if 6 <= now_time <= 10:
+            base_greeting_text = '早上好!'
+        elif 11 <= now_time <= 12:
+            base_greeting_text = '中午好!'
+        elif 13 <= now_time <= 17:
+            base_greeting_text = '下午好！'
+        else:
+            base_greeting_text = '晚上好!'
+
+        print(f"[Petaler Log] 显示快速问候: {base_greeting_text}")
+        self.show_dialogue([base_greeting_text])  # 显示此部分，应较快出现
+
+        # 2. 获取天气信息 (此部分可能耗时较长)
+        print("[Petaler Log] 开始获取天气信息...")
+        # _get_weather_string 返回完整的用户可见字符串，例如 "当前城市：北京，天气：晴，温度：20°C" 或错误/状态信息
+        weather_info_string = asyncio.run(self._get_weather_string())
+        print(f"[Petaler Log] 获取到的天气信息字符串: {weather_info_string}")
+
+        # 3. 显示天气信息作为单独的对话
+        #    (除非天气信息获取失败导致返回的是提示信息，否则才显示)
+        if (
+            weather_info_string
+            and not weather_info_string.startswith("未能获取到有效城市信息")
+            and not weather_info_string.startswith("获取天气信息失败")
+            and not weather_info_string.startswith("高德API")
+            and not weather_info_string.startswith("Geocoder IP定位失败")
+        ):
+            self.show_dialogue([weather_info_string])
+        else:
+            # 如果获取天气失败，可以考虑显示一个通用提示，或者不显示任何额外内容
+            # 当前 _get_weather_string 已经会返回如 "未能获取到有效城市信息..." 的字符串，show_dialogue 会显示它
+            # 所以这里可能不需要额外处理失败情况的显示，除非想改变失败时的提示方式
+            # 为了避免重复显示错误，如果已经是错误信息，就不再调用 show_dialogue
+            # 但由于 show_dialogue 内部有延迟，而且 _get_weather_string 已经返回了用户可见的错误信息，
+            # 也许直接显示 weather_info_string 就好，让用户知道获取失败了。
+            # 重新考虑：总是显示 _get_weather_string 的结果，因为它包含了成功或失败的信息。
+            self.show_dialogue([weather_info_string])
 
     def kill(self):
         """
@@ -567,7 +676,6 @@ class Scheduler_worker(QObject):
         # 安全关闭调度器，停止所有任务
         self.scheduler.shutdown()
 
-
     def pause(self):
         """
         暂停调度器的活动。
@@ -576,7 +684,6 @@ class Scheduler_worker(QObject):
         self.is_paused = True
         # 暂停调度器，任务将不会在暂停期间触发
         self.scheduler.pause()
-
 
     def resume(self):
         """
@@ -587,23 +694,24 @@ class Scheduler_worker(QObject):
         # 恢复调度器，任务将按计划继续执行
         self.scheduler.resume()
 
-
     def greeting(self, time):
         """
         根据给定的小时数返回相应的问候语。
         """
+        base_greeting = ''
         if 0 <= time <= 10:
-            return '早上好!'
+            base_greeting = '早上好!'
         elif 11 <= time <= 12:
-            return '中午好!'
+            base_greeting = '中午好!'
         elif 13 <= time <= 17:
-            return '下午好！'
+            base_greeting = '下午好！'
         elif 18 <= time <= 24:
-            return '晚上好!'
+            base_greeting = '晚上好!'
         else:
-            # 对于无效的小时数或未覆盖的情况返回 'None'
-            return 'None'
+            base_greeting = '你好!'  # 默认问候语，以防时间无效或未覆盖的情况
 
+        weather_info = asyncio.run(self._get_weather_string())
+        return f"{base_greeting} {weather_info}"
 
     def show_dialogue(self, texts_toshow=[]):
         """
@@ -613,7 +721,7 @@ class Scheduler_worker(QObject):
         """
         # 等待：如果当前已有对话框在显示，则循环等待
         while settings.showing_dialogue_now:
-            time.sleep(1) # 等待1秒再检查
+            time.sleep(1)  # 等待1秒再检查
         # 标记：设置全局标志，表示现在开始显示对话框
         settings.showing_dialogue_now = True
 
@@ -622,10 +730,10 @@ class Scheduler_worker(QObject):
             # 发出信号，请求主界面显示当前文本
             self.sig_settext_sche.emit(text_toshow)
             # 等待：让文本显示一段时间 (固定3秒)
-            time.sleep(3) 
+            time.sleep(3)
 
         # 完成：所有文本显示完毕后，发出信号请求清除文本显示
-        self.sig_settext_sche.emit('None') # 'None' 作为清除文本的约定信号
+        self.sig_settext_sche.emit('None')  # 'None' 作为清除文本的约定信号
         # 标记：清除全局标志，允许其他对话请求
         settings.showing_dialogue_now = False
 
@@ -639,14 +747,16 @@ class Scheduler_worker(QObject):
             # 记录本次要进行的番茄钟总数
             self.n_tomato_now = n_tomato
             # 初始化时间累加器 (用于计算后续任务的触发时间)
-            time_plus = 0 # 单位：分钟
+            time_plus = 0  # 单位：分钟
 
             # --- 安排第一个番茄钟 ---
             # 1.1 安排 "开始第一个番茄钟" 的任务 (立即执行)
-            task_text = 'tomato_first' # 任务标识
-            time_torun = datetime.now() + timedelta(seconds=1) # 设定为1秒后执行
+            task_text = 'tomato_first'  # 任务标识
+            time_torun = datetime.now() + timedelta(seconds=1)  # 设定为1秒后执行
             # 添加一次性任务到调度器，使用 DateTrigger
-            self.scheduler.add_job(self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text])
+            self.scheduler.add_job(
+                self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text]
+            )
 
             # 累加第一个番茄钟的工作时间 (25分钟)
             time_plus += 25
@@ -654,14 +764,19 @@ class Scheduler_worker(QObject):
             # 1.2 安排 "第一个番茄钟结束" 的任务
             # 判断这是不是最后一个番茄钟
             if n_tomato == 1:
-                task_text = 'tomato_last' # 最后一个番茄钟结束的标识
+                task_text = 'tomato_last'  # 最后一个番茄钟结束的标识
             else:
-                task_text = 'tomato_end' # 非最后一个番茄钟结束的标识 (进入休息)
+                task_text = 'tomato_end'  # 非最后一个番茄钟结束的标识 (进入休息)
             # 计算触发时间 = 当前时间 + 累加的时间
             time_torun = datetime.now() + timedelta(minutes=time_plus)
             # 添加任务，并赋予 ID 以便后续可能取消
             job_id = 'tomato_0_end'
-            self.scheduler.add_job(self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text], id=job_id)
+            self.scheduler.add_job(
+                self.run_tomato,
+                date.DateTrigger(run_date=time_torun),
+                args=[task_text],
+                id=job_id,
+            )
             # 将任务ID存入列表，用于取消操作
             self.tomato_list.append(job_id)
             # 累加第一个番茄钟后的休息时间 (5分钟)
@@ -672,22 +787,32 @@ class Scheduler_worker(QObject):
                 # 循环处理第 2 个到第 n_tomato 个番茄钟
                 for i in range(1, n_tomato):
                     # 2.1 安排 "开始第 i+1 个番茄钟" 的任务
-                    task_text = 'tomato_start' # 后续番茄钟开始的标识
+                    task_text = 'tomato_start'  # 后续番茄钟开始的标识
                     time_torun = datetime.now() + timedelta(minutes=time_plus)
                     job_id_start = 'tomato_%s_start' % i
-                    self.scheduler.add_job(self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text], id=job_id_start)
+                    self.scheduler.add_job(
+                        self.run_tomato,
+                        date.DateTrigger(run_date=time_torun),
+                        args=[task_text],
+                        id=job_id_start,
+                    )
                     # 累加工作时间
                     time_plus += 25
 
                     # 2.2 安排 "第 i+1 个番茄钟结束" 的任务
                     # 判断是不是最后一个
                     if i == (n_tomato - 1):
-                        task_text = 'tomato_last' # 最后一个结束
+                        task_text = 'tomato_last'  # 最后一个结束
                     else:
-                        task_text = 'tomato_end' # 非最后一个结束 (进入休息)
+                        task_text = 'tomato_end'  # 非最后一个结束 (进入休息)
                     time_torun = datetime.now() + timedelta(minutes=time_plus)
                     job_id_end = 'tomato_%s_end' % i
-                    self.scheduler.add_job(self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text], id=job_id_end)
+                    self.scheduler.add_job(
+                        self.run_tomato,
+                        date.DateTrigger(run_date=time_torun),
+                        args=[task_text],
+                        id=job_id_end,
+                    )
                     # 累加休息时间
                     time_plus += 5
                     # 将开始和结束任务的 ID 都存入列表
@@ -697,16 +822,19 @@ class Scheduler_worker(QObject):
         # 条件2：如果当前正在进行专注模式
         elif self.focus_on:
             # 安排一个立即执行的任务，提示用户冲突
-            task_text = "focus_on" # 标识：因专注模式冲突
+            task_text = "focus_on"  # 标识：因专注模式冲突
             time_torun = datetime.now() + timedelta(seconds=1)
-            self.scheduler.add_job(self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text])
+            self.scheduler.add_job(
+                self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text]
+            )
         # 条件3：如果已有番茄钟在进行中 (n_tomato_now is not None)
         else:
             # 安排一个立即执行的任务，提示用户冲突
-            task_text = "tomato_exist" # 标识：因已有番茄钟冲突
+            task_text = "tomato_exist"  # 标识：因已有番茄钟冲突
             time_torun = datetime.now() + timedelta(seconds=1)
-            self.scheduler.add_job(self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text])
-
+            self.scheduler.add_job(
+                self.run_tomato, date.DateTrigger(run_date=time_torun), args=[task_text]
+            )
 
     def run_tomato(self, task_text):
         """
@@ -714,14 +842,19 @@ class Scheduler_worker(QObject):
         根据传入的 task_text 执行不同操作 (开始工作/休息、结束、处理冲突等)。
         """
         # 初始化要显示的文本
-        text_toshow = 'None' # 默认不显示文本
+        text_toshow = 'None'  # 默认不显示文本
 
         # --- 根据 task_text 执行不同逻辑 ---
         if task_text == 'tomato_start':
             # 开始一个新的番茄工作时段 (非第一个)
-            self.tomato_timeleft = 25 # 设置工作时间为25分钟
+            self.tomato_timeleft = 25  # 设置工作时间为25分钟
             # 添加/替换 'tomato_timer' 任务，每分钟调用 change_tomato 更新剩余时间
-            self.scheduler.add_job(self.change_tomato, interval.IntervalTrigger(minutes=1), id='tomato_timer', replace_existing=True)
+            self.scheduler.add_job(
+                self.change_tomato,
+                interval.IntervalTrigger(minutes=1),
+                id='tomato_timer',
+                replace_existing=True,
+            )
             # 发送信号更新UI显示：开始工作，显示剩余时间
             self.sig_settime_sche.emit('tomato_start', self.tomato_timeleft)
             # 从任务ID列表中移除当前已执行的 'start' 任务ID (假定按顺序执行)
@@ -731,9 +864,14 @@ class Scheduler_worker(QObject):
 
         elif task_text == 'tomato_first':
             # 开始第一个番茄工作时段
-            self.tomato_timeleft = 25 # 设置工作时间为25分钟
+            self.tomato_timeleft = 25  # 设置工作时间为25分钟
             # 添加/替换 'tomato_timer'，每分钟更新剩余时间
-            self.scheduler.add_job(self.change_tomato, interval.IntervalTrigger(minutes=1), id='tomato_timer', replace_existing=True)
+            self.scheduler.add_job(
+                self.change_tomato,
+                interval.IntervalTrigger(minutes=1),
+                id='tomato_timer',
+                replace_existing=True,
+            )
             # 发送信号更新UI显示：开始工作，显示剩余时间
             self.sig_settime_sche.emit('tomato_start', self.tomato_timeleft)
             # 设置提示文本，包含总番茄数
@@ -741,9 +879,14 @@ class Scheduler_worker(QObject):
 
         elif task_text == 'tomato_end':
             # 一个番茄工作时段结束，开始休息 (非最后一个)
-            self.tomato_timeleft = 5 # 设置休息时间为5分钟
+            self.tomato_timeleft = 5  # 设置休息时间为5分钟
             # 添加/替换 'tomato_timer'，每分钟更新剩余休息时间
-            self.scheduler.add_job(self.change_tomato, interval.IntervalTrigger(minutes=1), id='tomato_timer', replace_existing=True)
+            self.scheduler.add_job(
+                self.change_tomato,
+                interval.IntervalTrigger(minutes=1),
+                id='tomato_timer',
+                replace_existing=True,
+            )
             # 发送信号更新UI显示：开始休息，显示剩余时间
             self.sig_settime_sche.emit('tomato_rest', self.tomato_timeleft)
             # 从任务ID列表中移除当前已执行的 'end' 任务ID
@@ -756,13 +899,13 @@ class Scheduler_worker(QObject):
             try:
                 # 尝试移除用于更新时间的 'tomato_timer' 任务
                 self.scheduler.remove_job('tomato_timer')
-            except Exception: # 更具体的异常类型如 JobLookupError 会更好
+            except Exception:  # 更具体的异常类型如 JobLookupError 会更好
                 # 如果任务不存在 (可能已结束或从未添加)，则忽略错误
                 pass
             # 重置状态变量
             self.tomato_timeleft = 0
-            self.n_tomato_now = None # 清除当前番茄钟系列标记
-            self.tomato_list = [] # 清空任务ID列表
+            self.n_tomato_now = None  # 清除当前番茄钟系列标记
+            self.tomato_list = []  # 清空任务ID列表
             # 发送信号通知UI番茄钟系列结束
             self.sig_tomato_end.emit()
             # 发送信号更新UI时间显示：结束状态
@@ -792,9 +935,9 @@ class Scheduler_worker(QObject):
             for job_id in self.tomato_list:
                 try:
                     self.scheduler.remove_job(job_id)
-                except Exception: 
-                    pass # 忽略移除不存在任务的错误
-            self.tomato_list = [] # 清空任务ID列表
+                except Exception:
+                    pass  # 忽略移除不存在任务的错误
+            self.tomato_list = []  # 清空任务ID列表
             try:
                 # 尝试移除时间更新器 'tomato_timer'
                 self.scheduler.remove_job('tomato_timer')
@@ -810,16 +953,19 @@ class Scheduler_worker(QObject):
         if text_toshow != 'None':
             self.show_dialogue([text_toshow])
 
-
     def cancel_tomato(self):
         """
         安排一个立即执行的任务来取消当前正在进行的番茄钟系列。
         实际的取消逻辑在 run_tomato 方法中处理 'tomato_cancel' 任务时执行。
         """
-        task_text = "tomato_cancel" # 设置任务标识为取消
+        task_text = "tomato_cancel"  # 设置任务标识为取消
         # 安排一个1秒后执行的任务，触发 run_tomato 处理取消逻辑
         time_torun_cancel = datetime.now() + timedelta(seconds=1)
-        self.scheduler.add_job(self.run_tomato, date.DateTrigger(run_date=time_torun_cancel), args=[task_text])
+        self.scheduler.add_job(
+            self.run_tomato,
+            date.DateTrigger(run_date=time_torun_cancel),
+            args=[task_text],
+        )
 
     def change_hp(self):
         """
@@ -842,12 +988,12 @@ class Scheduler_worker(QObject):
         # 剩余时间减 1 分钟
         self.tomato_timeleft -= 1
         # 如果剩余时间小于等于1分钟 (意味着下一次触发时就结束了)
-        if self.tomato_timeleft < 1: # 使用 < 1 更安全，避免等于0时重复移除
+        if self.tomato_timeleft < 1:  # 使用 < 1 更安全，避免等于0时重复移除
             try:
                 # 移除自身这个定时器任务 'tomato_timer'
                 self.scheduler.remove_job('tomato_timer')
-            except Exception: # JobLookupError
-                pass # 忽略错误
+            except Exception:  # JobLookupError
+                pass  # 忽略错误
         # 发送信号更新UI的时间显示 (类型为'tomato'，表示进行中)
         self.sig_settime_sche.emit('tomato', self.tomato_timeleft)
 
@@ -858,15 +1004,14 @@ class Scheduler_worker(QObject):
         # 剩余时间减 1 分钟
         self.focus_time -= 1
         # 如果剩余时间小于等于1分钟
-        if self.focus_time < 1: 
+        if self.focus_time < 1:
             try:
                 # 移除自身这个定时器任务 'focus_timer'
                 self.scheduler.remove_job('focus_timer')
-            except Exception: 
-                pass # 忽略错误
+            except Exception:
+                pass  # 忽略错误
         # 发送信号更新UI的时间显示 (类型为'focus'，表示进行中)
         self.sig_settime_sche.emit('focus', self.focus_time)
-
 
     def add_focus(self, time_range=None, time_point=None):
         """
@@ -880,23 +1025,27 @@ class Scheduler_worker(QObject):
             # 安排立即执行的任务提示冲突
             task_text = "tomato_exist"
             time_torun = datetime.now() + timedelta(seconds=1)
-            self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=time_torun), args=[task_text])
-            return # 冲突，直接返回
+            self.scheduler.add_job(
+                self.run_focus, date.DateTrigger(run_date=time_torun), args=[task_text]
+            )
+            return  # 冲突，直接返回
 
         # 2. 检查是否已有专注任务在进行
         elif self.focus_on:
             # 安排立即执行的任务提示冲突
             task_text = "focus_exist"
             time_torun = datetime.now() + timedelta(seconds=1)
-            self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=time_torun), args=[task_text])
-            return # 冲突，直接返回
+            self.scheduler.add_job(
+                self.run_focus, date.DateTrigger(run_date=time_torun), args=[task_text]
+            )
+            return  # 冲突，直接返回
 
         # --- 添加专注任务 ---
         # 模式一：按持续时间设置 (time_range)
         elif time_range is not None:
             # 检查总时间是否大于0
             if sum(time_range) <= 0:
-                return # 时间为0或负数，不添加任务
+                return  # 时间为0或负数，不添加任务
 
             # 设置专注模式状态
             self.focus_on = True
@@ -906,20 +1055,37 @@ class Scheduler_worker(QObject):
             # 安排 "开始专注" 任务 (立即执行)
             task_text_start = "focus_start"
             time_torun_start = datetime.now() + timedelta(seconds=1)
-            self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=time_torun_start), args=[task_text_start])
+            self.scheduler.add_job(
+                self.run_focus,
+                date.DateTrigger(run_date=time_torun_start),
+                args=[task_text_start],
+            )
 
             # 安排 "结束专注" 任务 (在指定时间后)
             task_text_end = "focus_end"
-            time_torun_end = datetime.now() + timedelta(hours=time_range[0], minutes=time_range[1])
+            time_torun_end = datetime.now() + timedelta(
+                hours=time_range[0], minutes=time_range[1]
+            )
             # 添加任务，并设置ID 'focus' 以便取消
-            self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=time_torun_end), args=[task_text_end], id='focus')
+            self.scheduler.add_job(
+                self.run_focus,
+                date.DateTrigger(run_date=time_torun_end),
+                args=[task_text_end],
+                id='focus',
+            )
 
         # 模式二：按结束时间点设置 (time_point)
         elif time_point is not None:
             now = datetime.now()
             # 构建目标结束时间的 datetime 对象 (同年同月同日)
-            target_time = datetime(year=now.year, month=now.month, day=now.day,
-                                   hour=time_point[0], minute=time_point[1], second=now.second)
+            target_time = datetime(
+                year=now.year,
+                month=now.month,
+                day=now.day,
+                hour=time_point[0],
+                minute=time_point[1],
+                second=now.second,
+            )
             # 计算时间差
             time_diff = target_time - now
             # 计算总剩余分钟数 (向下取整)
@@ -930,18 +1096,27 @@ class Scheduler_worker(QObject):
                 # 假设用户意图是明天的这个时间点，将目标时间加一天
                 target_time = target_time + timedelta(days=1)
                 # 重新计算剩余分钟数
-                self.focus_time += 24 * 60 # 加上一天的分钟数
+                self.focus_time += 24 * 60  # 加上一天的分钟数
 
                 # 设置专注状态
                 self.focus_on = True
                 # 安排 "开始专注(明天)" 任务 (立即执行提示)
                 task_text_start = "focus_start_tomorrow"
                 time_torun_start = datetime.now() + timedelta(seconds=1)
-                self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=time_torun_start), args=[task_text_start])
+                self.scheduler.add_job(
+                    self.run_focus,
+                    date.DateTrigger(run_date=time_torun_start),
+                    args=[task_text_start],
+                )
 
                 # 安排 "结束专注" 任务 (在明天的指定时间点)
                 task_text_end = "focus_end"
-                self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=target_time), args=[task_text_end], id='focus')
+                self.scheduler.add_job(
+                    self.run_focus,
+                    date.DateTrigger(run_date=target_time),
+                    args=[task_text_end],
+                    id='focus',
+                )
             # 情况B: 目标时间在未来 (当天)
             else:
                 # 设置专注状态
@@ -949,11 +1124,20 @@ class Scheduler_worker(QObject):
                 # 安排 "开始专注" 任务 (立即执行)
                 task_text_start = "focus_start"
                 time_torun_start = datetime.now() + timedelta(seconds=1)
-                self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=time_torun_start), args=[task_text_start])
+                self.scheduler.add_job(
+                    self.run_focus,
+                    date.DateTrigger(run_date=time_torun_start),
+                    args=[task_text_start],
+                )
 
                 # 安排 "结束专注" 任务 (在指定的未来时间点)
                 task_text_end = "focus_end"
-                self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=target_time), args=[task_text_end], id='focus')
+                self.scheduler.add_job(
+                    self.run_focus,
+                    date.DateTrigger(run_date=target_time),
+                    args=[task_text_end],
+                    id='focus',
+                )
 
     def run_focus(self, task_text):
         """
@@ -961,22 +1145,27 @@ class Scheduler_worker(QObject):
         根据传入的 task_text 执行不同操作 (开始、结束、处理冲突、取消等)。
         """
         # 初始化要显示的对话文本列表 (因为可能有多个对话)
-        texts_toshow = ['None'] # 默认不显示
+        texts_toshow = ['None']  # 默认不显示
 
         # --- 根据 task_text 执行不同逻辑 ---
         if task_text == 'tomato_exist':
             # 尝试添加专注时，发现有番茄钟冲突
-            self.sig_focus_end.emit() # 发送结束信号，通知UI添加失败
+            self.sig_focus_end.emit()  # 发送结束信号，通知UI添加失败
             texts_toshow = ['不行！还有番茄钟在进行哦~']
         elif task_text == 'focus_exist':
             # 尝试添加专注时，发现已有专注任务冲突
-            self.sig_focus_end.emit() # 发送结束信号，通知UI添加失败
+            self.sig_focus_end.emit()  # 发送结束信号，通知UI添加失败
             texts_toshow = ["不行！还有专注任务在进行哦~"]
         elif task_text == 'focus_start':
             # 开始专注任务 (当天或按时长)
             # 如果专注时间大于1分钟，启动分钟计时器
-            if self.focus_time > 0: # 检查大于0即可
-                self.scheduler.add_job(self.change_focus, interval.IntervalTrigger(minutes=1), id='focus_timer', replace_existing=True)
+            if self.focus_time > 0:  # 检查大于0即可
+                self.scheduler.add_job(
+                    self.change_focus,
+                    interval.IntervalTrigger(minutes=1),
+                    id='focus_timer',
+                    replace_existing=True,
+                )
             # 发送信号更新UI：开始专注，显示总时间
             self.sig_settime_sche.emit('focus_start', self.focus_time)
             texts_toshow = ["你的专注任务开始啦！"]
@@ -984,19 +1173,24 @@ class Scheduler_worker(QObject):
             # 开始专注任务 (设定在明天)
             # 如果专注时间大于1分钟，启动分钟计时器
             if self.focus_time > 0:
-                self.scheduler.add_job(self.change_focus, interval.IntervalTrigger(minutes=1), id='focus_timer', replace_existing=True)
+                self.scheduler.add_job(
+                    self.change_focus,
+                    interval.IntervalTrigger(minutes=1),
+                    id='focus_timer',
+                    replace_existing=True,
+                )
             # 发送信号更新UI：开始专注，显示总时间
             self.sig_settime_sche.emit('focus_start', self.focus_time)
             # 显示两条提示信息
             texts_toshow = ["专注任务开始啦！", "但设定在明天，请确认无误哦~"]
         elif task_text == 'focus_end':
             # 专注任务结束
-            self.focus_time = 0 # 重置剩余时间
+            self.focus_time = 0  # 重置剩余时间
             try:
                 # 尝试移除分钟计时器
                 self.scheduler.remove_job('focus_timer')
             except Exception:
-                pass # 忽略错误
+                pass  # 忽略错误
             # 发送信号更新UI：专注结束
             self.sig_settime_sche.emit('focus_end', self.focus_time)
             # 清除专注状态标志
@@ -1006,12 +1200,12 @@ class Scheduler_worker(QObject):
             texts_toshow = ["你的专注任务结束啦！"]
         elif task_text == 'focus_cancel':
             # 执行取消专注任务的操作
-            self.focus_time = 0 # 重置剩余时间
+            self.focus_time = 0  # 重置剩余时间
             try:
                 # 尝试移除分钟计时器
                 self.scheduler.remove_job('focus_timer')
-            except Exception: 
-                pass # 忽略错误
+            except Exception:
+                pass  # 忽略错误
             # 发送信号更新UI：专注结束 (取消也是一种结束)
             self.sig_settime_sche.emit('focus_end', self.focus_time)
             # 清除专注状态标志
@@ -1031,13 +1225,16 @@ class Scheduler_worker(QObject):
             # 尝试移除ID为 'focus' 的结束任务
             self.scheduler.remove_job('focus')
         except Exception:
-            pass # 忽略错误，可能任务已执行或不存在
+            pass  # 忽略错误，可能任务已执行或不存在
 
         # 安排一个立即执行的任务来运行取消逻辑
         task_text = "focus_cancel"
         time_torun_cancel = datetime.now() + timedelta(seconds=1)
-        self.scheduler.add_job(self.run_focus, date.DateTrigger(run_date=time_torun_cancel), args=[task_text])
-
+        self.scheduler.add_job(
+            self.run_focus,
+            date.DateTrigger(run_date=time_torun_cancel),
+            args=[task_text],
+        )
 
     def add_remind(self, texts, time_range=None, time_point=None, repeat=False):
         """
@@ -1049,11 +1246,13 @@ class Scheduler_worker(QObject):
         if time_point is not None:
             # 子模式 A: 重复提醒
             if repeat:
-                certain_hour = int(time_point[0]) # 获取小时
-                certain_minute = int(time_point[1]) # 获取分钟
-                self.scheduler.add_job(self.run_remind,
-                                       cron.CronTrigger(hour=certain_hour,minute=certain_minute),
-                                       args=[texts]) # 参数是提醒文本
+                certain_hour = int(time_point[0])  # 获取小时
+                certain_minute = int(time_point[1])  # 获取分钟
+                self.scheduler.add_job(
+                    self.run_remind,
+                    cron.CronTrigger(hour=certain_hour, minute=certain_minute),
+                    args=[texts],
+                )  # 参数是提醒文本
             # 子模式 B: 一次性提醒
             else:
                 now = datetime.now()
@@ -1062,7 +1261,9 @@ class Scheduler_worker(QObject):
                 # 确定提醒的日期
 
                 # 1. 计算今天的目标时间点 (时、分、秒、微秒替换为目标值)
-                target_datetime = now.replace(hour=certain_hour, minute=certain_minute, second=0, microsecond=0)
+                target_datetime = now.replace(
+                    hour=certain_hour, minute=certain_minute, second=0, microsecond=0
+                )
 
                 # 2. 如果计算出的目标时间点在当前时间之前或就是当前时间，
                 #    说明用户意图是明天的这个时间，将目标日期增加一天。
@@ -1071,39 +1272,49 @@ class Scheduler_worker(QObject):
 
                 # 3. 使用 DateTrigger 和计算好的完整日期时间对象来安排一次性任务，
                 #    这样可以正确处理跨月和跨年的情况。
-                self.scheduler.add_job(self.run_remind,
-                                       date.DateTrigger(run_date=target_datetime),
-                                       args=[texts])
+                self.scheduler.add_job(
+                    self.run_remind,
+                    date.DateTrigger(run_date=target_datetime),
+                    args=[texts],
+                )
 
         # 模式二：按相对时间 (time_range) 设置
         elif time_range is not None:
             # 子模式 A: 重复提醒
             if repeat:
-                total_interval_minutes = int(time_range[0])*60 + int(time_range[1]) # 计算总间隔分钟数
-                if total_interval_minutes <= 0: 
-                    return # 间隔需大于0
+                total_interval_minutes = int(time_range[0]) * 60 + int(
+                    time_range[1]
+                )  # 计算总间隔分钟数
+                if total_interval_minutes <= 0:
+                    return  # 间隔需大于0
                 # 使用 IntervalTrigger 实现周期性提醒
-                self.scheduler.add_job(self.run_remind,
-                                       interval.IntervalTrigger(minutes=total_interval_minutes),
-                                       args=[texts]) # 参数是提醒文本
+                self.scheduler.add_job(
+                    self.run_remind,
+                    interval.IntervalTrigger(minutes=total_interval_minutes),
+                    args=[texts],
+                )  # 参数是提醒文本
             # 子模式 B: 一次性提醒
             else:
                 # 检查总时间是否大于0
                 if sum(time_range) <= 0:
-                    return # 时间为0或负数，不添加
+                    return  # 时间为0或负数，不添加
                 # 计算未来的触发时间点
-                time_torun = datetime.now() + timedelta(hours=time_range[0], minutes=time_range[1])
+                time_torun = datetime.now() + timedelta(
+                    hours=time_range[0], minutes=time_range[1]
+                )
                 # 使用 DateTrigger 添加一次性任务
-                self.scheduler.add_job(self.run_remind,
-                                       date.DateTrigger(run_date=time_torun),
-                                       args=[texts]) # 参数是提醒文本
+                self.scheduler.add_job(
+                    self.run_remind, date.DateTrigger(run_date=time_torun), args=[texts]
+                )  # 参数是提醒文本
 
         # --- 添加 "提醒设置完成" 的即时提示 ---
         # 无论哪种模式，都安排一个立即执行的任务来提示用户设置成功
         time_torun_confirm = datetime.now() + timedelta(seconds=1)
-        self.scheduler.add_job(self.run_remind,
-                               date.DateTrigger(run_date=time_torun_confirm),
-                               args=['remind_start']) # 特殊参数标识设置成功              
+        self.scheduler.add_job(
+            self.run_remind,
+            date.DateTrigger(run_date=time_torun_confirm),
+            args=['remind_start'],
+        )  # 特殊参数标识设置成功
 
     def run_remind(self, task_text):
         """

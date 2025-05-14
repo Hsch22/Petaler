@@ -6,7 +6,7 @@ Petaler 桌面宠物应用启动脚本。
 应用自定义样式表，并创建和显示主宠物窗口 (PetWidget)。
 """
 
-import sys  
+import sys
 
 from PyQt5.QtWidgets import QApplication
 
@@ -43,6 +43,7 @@ STYLE_SHEET = '''
 }
 '''
 
+
 def main():
     """
     应用程序的主入口点。
@@ -51,13 +52,13 @@ def main():
     # 1. 加载宠物数据
     try:
         pets_data = read_json('data/pets.json')
-        print("宠物数据加载成功。") 
+        print("宠物数据加载成功。")
     except FileNotFoundError:
         print("错误：找不到宠物数据文件 'data/pets.json'。请确保文件存在。")
-        sys.exit(1) 
+        sys.exit(1)
     except Exception as e:
         print(f"加载宠物数据时发生错误: {e}")
-        sys.exit(1) 
+        sys.exit(1)
 
     app = QApplication(sys.argv)
 
