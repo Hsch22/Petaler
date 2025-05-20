@@ -113,6 +113,35 @@ class PetWidget(QWidget):
         # --- 根据加载的宠物数据配置UI ---
         self._setup_ui(self.pic_dict)  # 设置UI元素尺寸、初始值等
 
+        # super().__init__(parent, flags=Qt.WindowFlags())
+        # # --- 安全性检查 ---
+        # if not curr_pet_name and not pets:
+        #     raise ValueError(
+        #         "必须提供 'curr_pet_name' 或非空的 'pets' 元组来初始化 PetWidget。"
+        #     )
+
+        # self.pets: tuple = pets
+        # # 1. 先加载配置和图片
+        # initial_pet_name_to_load = curr_pet_name if curr_pet_name else pets[0]
+        # self.curr_pet_name = initial_pet_name_to_load
+        # self.pic_dict = _load_all_pic(self.curr_pet_name)
+        # self.pet_conf = PetConfig.init_config(self.curr_pet_name, self.pic_dict)
+        # self.margin_value = 0.5 * max(self.pet_conf.width, self.pet_conf.height)
+        # self.pet_data = PetData(self.curr_pet_name)
+
+        # # 2. 再初始化UI
+        # self._init_ui()
+        # self._init_widget()
+        # self._setup_ui(self.pic_dict)
+
+        # # 3. 后续线程和显示
+        # self.show()
+        # self.threads: dict[str, QThread] = {}
+        # self.workers: dict[str, QObject] = {}
+        # self.runAnimation()
+        # self.runInteraction()
+        # self.runScheduler()
+
     # 在 PetWidget 类定义内部
 
     def mousePressEvent(self, event) -> None:
