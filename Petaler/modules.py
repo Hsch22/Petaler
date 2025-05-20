@@ -468,13 +468,19 @@ class Interaction_worker(QObject):
     def drop(self):
         """
         计算并发出掉落过程中的位移信号。
-        模拟重力效果。
+        模拟重力和速度衰减（线性阻力 F=-kv），但速度低于阈值时只加重力。
         """
 
         # 获取当前的垂直速度作为本次的 y 轴位移增量
         plus_y = settings.dragspeedy
         # 获取当前的水平速度作为本次的 x 轴位移增量
         plus_x = settings.dragspeedx
+
+        # 只有速度大于阈值时才施加阻力
+        if abs(settings.dragspeedx) > settings.drag_speed_threshold:
+            settings.dragspeedx *= 1 - settings.drag_base_friction
+        if abs(settings.dragspeedy) > settings.drag_speed_threshold:
+            settings.dragspeedy *= 1 - settings.drag_base_friction
         # 更新垂直速度，模拟重力加速度
         settings.dragspeedy = settings.dragspeedy + self.pet_conf.gravity
 
