@@ -11,6 +11,7 @@ import json
 import glob
 import os.path
 import time
+from typing import Optional
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage 
@@ -31,7 +32,7 @@ class Act:
                  images: tuple[QImage, ...], 
                  act_num: int = 1,
                  need_move: bool = False,
-                 direction: str | None = None,
+                 direction: Optional[str] = None,
                  frame_move: float = 10.0, 
                  frame_refresh: float = 0.04):
         """
@@ -106,7 +107,7 @@ class PetConfig:
 
     def __init__(self):
         """初始化一个空的 PetConfig 实例，所有属性设为默认值。"""
-        self.petname: str | None = None
+        self.petname: Optional[str] = None
         self.width: float = 128.0
         self.height: float = 128.0
         self.scale: float = 1.0
@@ -117,13 +118,13 @@ class PetConfig:
         self.gravity: float = 4.0 
 
         # 核心动作属性，将在 init_config 中被赋值为 Act 实例
-        self.default: Act | None = None
-        self.up: Act | None = None
-        self.down: Act | None = None
-        self.left: Act | None = None
-        self.right: Act | None = None
-        self.drag: Act | None = None
-        self.fall: Act | None = None
+        self.default: Optional[Act] = None
+        self.up: Optional[Act] = None
+        self.down: Optional[Act] = None
+        self.left: Optional[Act] = None
+        self.right: Optional[Act] = None
+        self.drag: Optional[Act] = None
+        self.fall: Optional[Act] = None
 
         # 随机动作相关属性
         self.random_act: list[list[Act]] = [] # 存储分组的随机动作 Act 实例列表

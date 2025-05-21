@@ -51,7 +51,7 @@ else:
 class PetWidget(QWidget):
 
     def __init__(
-        self, parent: QWidget | None = None, curr_pet_name: str = '', pets: tuple = ()
+        self, parent: Optional[QWidget] = None, curr_pet_name: str = '', pets: tuple = ()
     ):
         """
         初始化宠物窗口部件。
@@ -77,8 +77,8 @@ class PetWidget(QWidget):
             PetConfig()
         )  # 宠物配置对象 (将在 init_conf 中加载实际配置)
 
-        self.image: QImage | None = None  # 当前用于显示的 QImage 对象
-        self.tray: QSystemTrayIcon | None = None  # 系统托盘图标实例
+        self.image: Optional[QImage] = None  # 当前用于显示的 QImage 对象
+        self.tray: Optional[QSystemTrayIcon]= None  # 系统托盘图标实例
 
         # --- 窗口交互状态属性 ---
         self.is_follow_mouse: bool = False  # 标志位：窗口当前是否跟随鼠标拖动
@@ -2078,7 +2078,7 @@ def _build_act(name: str, parent: QObject, act_func) -> QAction:
         return None
 
 
-def _get_q_img(img_path: str) -> QImage | None:
+def _get_q_img(img_path: str) -> Optional[QImage]:
     """
     从指定的路径加载图片为 QImage 对象。
     """
