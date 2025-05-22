@@ -20,7 +20,6 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
 from typing import List
 
 import ctypes
@@ -50,12 +49,12 @@ class Tomato(QWidget):
     一个用于设置番茄钟个数的弹出式小部件。
 
     该窗口提供一个 QSpinBox 供用户选择要执行的番茄钟数量，
-    并通过“确定”和“取消”按钮进行操作。
+    并通过"确定"和"取消"按钮进行操作。
     窗口设计为有边框、始终置顶。
 
     信号:
-        close_tomato: 当用户点击“取消”按钮时发出，通知父级关闭此窗口。
-        confirm_tomato (int): 当用户点击“确定”按钮时发出，携带用户选择的番茄钟数量。
+        close_tomato: 当用户点击"取消"按钮时发出，通知父级关闭此窗口。
+        confirm_tomato (int): 当用户点击"确定"按钮时发出，携带用户选择的番茄钟数量。
     """
 
     # 定义信号
@@ -139,10 +138,6 @@ class Tomato(QWidget):
         self.n_tomato.setFont(self._widget_font)  # 统一字体
         self.n_tomato.setAlignment(Qt.AlignCenter)  # 数字居中显示
 
-        hbox_t1 = QHBoxLayout()
-        hbox_t1.addWidget(self.n_tomato_label)
-        hbox_t1.addWidget(self.n_tomato)
-
         # --- 确认和取消按钮 ---
         self.button_confirm = QPushButton("确定")
         self.button_confirm.setFont(self._widget_font)
@@ -152,29 +147,54 @@ class Tomato(QWidget):
         self.button_cancel.setFont(self._widget_font)
         self.button_cancel.clicked.connect(self.close_tomato)  # 直接连接到关闭信号
 
-        hbox_t = QHBoxLayout()
-        hbox_t.addStretch(1)  # 添加弹性空间将按钮推向中间或右侧
-        hbox_t.addWidget(self.button_confirm)
-        hbox_t.addWidget(self.button_cancel)
-        hbox_t.addStretch(1)  # 可以再加一个以居中按钮，或不加使按钮靠右
+        # --- 使用 QGridLayout 布局 ---
+        self.grid_layout = QGridLayout()
+        self.grid_layout.addWidget(self.n_tomato_label, 0, 0, 1, 2)  # 占据第一行两列
+        self.grid_layout.addWidget(self.n_tomato, 0, 2, 1, 1)  # 占据第一行第三列
+        self.grid_layout.addWidget(self.button_confirm, 1, 1, 1, 1)  # 占据第二行第二列
+        self.grid_layout.addWidget(self.button_cancel, 1, 2, 1, 1)  # 占据第二行第三列
 
-        # --- 整体垂直布局 ---
-        vbox_t = QVBoxLayout()
-        vbox_t.addLayout(hbox_t1)  # 添加数量选择行
-        vbox_t.addStretch(1)  # 在输入和按钮之间添加一些弹性空间
-        vbox_t.addLayout(hbox_t)  # 添加按钮行
+        self.grid_layout.setRowStretch(0, 1)  # 第一行可以伸缩
+        self.grid_layout.setRowStretch(1, 1)  # 第二行可以伸缩
+        self.grid_layout.setColumnStretch(0, 1)  # 第一列可以伸缩
+        self.grid_layout.setColumnStretch(1, 1)  # 第二列可以伸缩
+        self.grid_layout.setColumnStretch(2, 1)  # 第三列可以伸缩
 
-        self.setLayout(vbox_t)  # 直接设置布局到当前窗口
+        self.setLayout(self.grid_layout)  # 设置布局到当前窗口
 
         self.setWindowTitle("番茄钟设置")  # 设置窗口标题
 
     def resizeEvent(self, event):
-        """窗口大小变化时动态调整字体大小"""
+        """窗口大小变化时动态调整字体大小和布局元素大小"""
         try:
             super().resizeEvent(event)
             self.update_font_size()
+            self.adjust_layout_elements()
         except Exception as e:
             print(f"[错误] resizeEvent: 发生错误: {e}")
+
+    def adjust_layout_elements(self):
+        """根据窗口大小动态调整布局中的元素大小"""
+        try:
+            width, height = self.width(), self.height()
+
+            # 动态调整 QLabel 的大小
+            label_width = int(width * 0.60)  # QLabel 占据约 60% 宽度
+            label_height = height // 3  # QLabel 占据三分之一高度
+            self.n_tomato_label.setFixedSize(label_width, label_height)
+
+            # 动态调整 QSpinBox 的大小
+            spinbox_width = int(width * 0.30)  # QSpinBox 占据约 30% 宽度
+            spinbox_height = height // 3  # QSpinBox 占据三分之一高度
+            self.n_tomato.setFixedSize(spinbox_width, spinbox_height)
+
+            # 动态调整按钮大小
+            button_width = width // 4  # 按钮占据四分之一宽度
+            button_height = height // 4  # 按钮占据四分之一高度
+            self.button_confirm.setFixedSize(button_width, button_height)
+            self.button_cancel.setFixedSize(button_width, button_height)
+        except Exception as e:
+            print(f"[错误] adjust_layout_elements: 发生错误: {e}")
 
     def update_font_size(self):
         """根据窗口大小动态调整字体大小"""
@@ -190,12 +210,16 @@ class Tomato(QWidget):
                 self.n_tomato.setFont(font)
                 self.button_confirm.setFont(font)
                 self.button_cancel.setFont(font)
+                # 直接调整 QSpinBox 内部 QLineEdit 的字体大小
+                line_edit = self.n_tomato.lineEdit()
+                if line_edit:
+                    line_edit.setFont(font)
         except Exception as e:
             print(f"[错误] update_font_size: 发生错误: {e}")
 
     def confirm(self):
         """
-        处理“确定”按钮点击事件。
+        处理"确定"按钮点击事件。
 
         获取 QSpinBox 中的当前值，并发出 `confirm_tomato` 信号。
         注意：此方法本身不关闭窗口，关闭逻辑通常由接收信号的父级处理。
@@ -225,8 +249,8 @@ class Focus(QWidget):
     窗口设计为有边框、始终置顶。
 
     信号:
-        close_focus: 当用户点击“取消”按钮时发出，通知父级关闭此窗口。
-        confirm_focus (str, int, int): 当用户点击“确定”按钮时发出。
+        close_focus: 当用户点击"取消"按钮时发出，通知父级关闭此窗口。
+        confirm_focus (str, int, int): 当用户点击"确定"按钮时发出。
             - 第一个参数 (str): 模式标识符 ('range' 或 'point')。
             - 第二个参数 (int): 小时数。
             - 第三个参数 (int): 分钟数。
@@ -295,7 +319,7 @@ class Focus(QWidget):
             )
 
         # 创建 QFont 对象，后续 UI 元素将使用此字体
-        self._font = QFont(effective_font_family, 8)  # 默认字体大小为 12
+        self._font = QFont(effective_font_family, 8)  # 默认字体大小为 8
 
     def _init_ui(self):
         """创建并布局窗口中的 UI 元素。"""
@@ -304,10 +328,10 @@ class Focus(QWidget):
         main_layout = QVBoxLayout()  # 主垂直布局
 
         # --- 模式选择 ---
-        label_method = QLabel('设置方式')
-        label_method.setFont(self._font)
-        label_method.setStyleSheet("color: grey")  # 保持灰色样式
-        main_layout.addWidget(label_method)
+        self.label_method = QLabel('设置方式')
+        self.label_method.setFont(self._font)
+        self.label_method.setStyleSheet("color: grey")  # 保持灰色样式
+        main_layout.addWidget(self.label_method)
 
         # 水平分割线
         line = QFrame()
@@ -333,15 +357,15 @@ class Focus(QWidget):
         self.countdown_m.setFont(self._font)  # 应用统一字体
         self.countdown_m.setAlignment(Qt.AlignCenter)  # 数字居中
 
-        label_h1 = QLabel('小时')
-        label_h1.setFont(self._font)
-        label_m1 = QLabel('分钟后')
-        label_m1.setFont(self._font)
+        self.label_h1 = QLabel('小时')
+        self.label_h1.setFont(self._font)
+        self.label_m1 = QLabel('分钟后')
+        self.label_m1.setFont(self._font)
 
         hbox_f1.addWidget(self.countdown_h)
-        hbox_f1.addWidget(label_h1)
+        hbox_f1.addWidget(self.label_h1)
         hbox_f1.addWidget(self.countdown_m)
-        hbox_f1.addWidget(label_m1)
+        hbox_f1.addWidget(self.label_m1)
         hbox_f1.addStretch(1)  # 使用 addStretch(1) 即可，不需要很大的值
 
         main_layout.addWidget(self.checkA)
@@ -365,18 +389,18 @@ class Focus(QWidget):
         self.time_m.setFont(self._font)  # 应用统一字体
         self.time_m.setAlignment(Qt.AlignCenter)  # 数字居中
 
-        label_d2 = QLabel('到')
-        label_d2.setFont(self._font)
-        label_h2 = QLabel('点')
-        label_h2.setFont(self._font)
-        label_m2 = QLabel('分')
-        label_m2.setFont(self._font)
+        self.label_d2 = QLabel('到')
+        self.label_d2.setFont(self._font)
+        self.label_h2 = QLabel('点')
+        self.label_h2.setFont(self._font)
+        self.label_m2 = QLabel('分')
+        self.label_m2.setFont(self._font)
 
-        hbox_f2.addWidget(label_d2)
+        hbox_f2.addWidget(self.label_d2)
         hbox_f2.addWidget(self.time_h)
-        hbox_f2.addWidget(label_h2)
+        hbox_f2.addWidget(self.label_h2)
         hbox_f2.addWidget(self.time_m)
-        hbox_f2.addWidget(label_m2)
+        hbox_f2.addWidget(self.label_m2)
         hbox_f2.addStretch(1)  # 使用 addStretch(1)
 
         main_layout.addWidget(self.checkB)
@@ -417,35 +441,86 @@ class Focus(QWidget):
         self.setWindowTitle("专注模式设置")  # 设置窗口标题
 
     def resizeEvent(self, event):
-        """窗口大小变化时动态调整字体大小"""
+        """窗口大小变化时动态调整字体大小和布局元素大小"""
         try:
             super().resizeEvent(event)
-            self.update_font_size()
+            self.updateDynamicFontSize()
+            self.adjust_layout_elements()
         except Exception as e:
             print(f"[错误] resizeEvent: 发生错误: {e}")
 
-    def update_font_size(self):
+    def adjust_layout_elements(self):
+        """根据窗口大小动态调整布局中的元素大小"""
+        try:
+            width, height = self.width(), self.height()
+
+            # 动态调整 QSpinBox 的大小
+            spinbox_width = width // 4  # 每个 QSpinBox 占据四分之一宽度
+            spinbox_height = height // 8  # QSpinBox 占据六分之一高度
+            self.countdown_h.setFixedSize(spinbox_width, spinbox_height)
+            self.countdown_m.setFixedSize(spinbox_width, spinbox_height)
+            self.time_h.setFixedSize(spinbox_width, spinbox_height)
+            self.time_m.setFixedSize(spinbox_width, spinbox_height)
+
+            # 动态调整按钮大小
+            button_width = width // 4  # 每个按钮占据四分之一宽度
+            button_height = height // 8  # 按钮占据六分之一高度
+            self.button_confirm.setFixedSize(button_width, button_height)
+            self.button_cancel.setFixedSize(button_width, button_height)
+
+            # 动态调整 QLabel 的大小
+            label_width = width // 2  # QLabel 占据一半宽度
+            label_height = height // 10  # QLabel 占据十分之一高度
+            self.label_method.setFixedSize(label_width, label_height)
+            self.label_h1.setFixedSize(label_width // 4, label_height)
+            self.label_m1.setFixedSize(label_width // 4, label_height)
+            self.label_d2.setFixedSize(label_width // 4, label_height)
+            self.label_h2.setFixedSize(label_width // 4, label_height)
+            self.label_m2.setFixedSize(label_width // 4, label_height)
+        except Exception as e:
+            print(f"[错误] adjust_layout_elements: 发生错误: {e}")
+
+    def updateDynamicFontSize(self):
         """根据窗口大小动态调整字体大小"""
         try:
             width, height = self.width(), self.height()
             new_font_size = max(
-                10, min(width // 60, height // 30)
+                8, min(width // 60, height // 30)
             )  # 调整字体大小计算公式
             if new_font_size != self.font_size:
                 self.font_size = new_font_size
                 font = QFont(
                     self._font.family(), self.font_size
                 )  # 使用当前字体家族和新的字体大小
+                self.label_method.setFont(font)
                 self.checkA.setFont(font)
                 self.checkB.setFont(font)
                 self.countdown_h.setFont(font)
                 self.countdown_m.setFont(font)
                 self.time_h.setFont(font)
                 self.time_m.setFont(font)
+                self.label_h1.setFont(font)
+                self.label_m1.setFont(font)
+                self.label_d2.setFont(font)
+                self.label_h2.setFont(font)
+                self.label_m2.setFont(font)
                 self.button_confirm.setFont(font)
                 self.button_cancel.setFont(font)
+                # 直接调整 QSpinBox 内部 QLineEdit 的字体大小
+                line_edit = self.time_h.lineEdit()
+                if line_edit:
+                    line_edit.setFont(font)
+                line_edit1 = self.time_m.lineEdit()
+                if line_edit1:
+                    line_edit1.setFont(font)
+                line_edit2 = self.countdown_h.lineEdit()
+                if line_edit2:
+                    line_edit2.setFont(font)
+                line_edit3 = self.countdown_m.lineEdit()
+                if line_edit3:
+                    line_edit3.setFont(font)
         except Exception as e:
-            print(f"[错误] update_font_size: 发生错误: {e}")
+            print(f"[错误] updateDynamicFontSize: 发生错误: {e}")
 
     def uncheck(self, state):
         """
@@ -463,7 +538,7 @@ class Focus(QWidget):
 
     def confirm(self):
         """
-        处理“确定”按钮点击事件。
+        处理"确定"按钮点击事件。
 
         根据当前选中的复选框，获取对应的时间值，
         并发射 `confirm_focus` 信号。
@@ -514,8 +589,8 @@ class Remindme(QWidget):
     窗口设计为有边框、始终置顶。
 
     信号:
-        close_remind: 当用户点击“关闭”按钮时发出。
-        confirm_remind (str, int, int, str): 当用户点击“确定”按钮设置新提醒时发出。
+        close_remind: 当用户点击"关闭"按钮时发出。
+        confirm_remind (str, int, int, str): 当用户点击"确定"按钮设置新提醒时发出。
             - 参数1 (str): 模式标识符 ('range', 'point', 'repeat_point', 'repeat_interval')。
             - 参数2 (int): 主要时间值 (小时或 0)。
             - 参数3 (int): 次要时间值 (分钟)。
@@ -602,10 +677,10 @@ class Remindme(QWidget):
         vbox_r = QVBoxLayout()  # 左侧垂直布局
 
         # 提醒方式标签和分隔线
-        label_method = QLabel('提醒方式')
-        label_method.setFont(self._font)
-        label_method.setStyleSheet("color: grey")
-        vbox_r.addWidget(label_method)
+        self.label_method = QLabel('提醒方式')
+        self.label_method.setFont(self._font)
+        self.label_method.setStyleSheet("color: grey")
+        vbox_r.addWidget(self.label_method)
         vbox_r.addWidget(QHLine())  # 使用自定义的水平线
 
         # 模式A: 一段时间后提醒
@@ -633,10 +708,10 @@ class Remindme(QWidget):
         vbox_r.addStretch(2)  # 保持原来的拉伸比例
 
         # 提醒内容输入标签和分隔线
-        label_r = QLabel(f'提醒我（限{self._max_line_edit_length}个字以内）')
-        label_r.setFont(self._font)
-        label_r.setStyleSheet("color: grey")
-        vbox_r.addWidget(label_r)
+        self.label_r = QLabel(f'提醒我（限{self._max_line_edit_length}个字以内）')
+        self.label_r.setFont(self._font)
+        self.label_r.setStyleSheet("color: grey")
+        vbox_r.addWidget(self.label_r)
         vbox_r.addWidget(QHLine())
 
         # 提醒内容输入框 (QLineEdit)
@@ -657,10 +732,10 @@ class Remindme(QWidget):
         # --- 右侧布局 (显示/编辑所有提醒) ---
         vbox_r2 = QVBoxLayout()  # 右侧垂直布局
 
-        label_on = QLabel('提醒事项（内容自动保存）')  # 修改了提示，强调自动保存
-        label_on.setFont(self._font)
-        label_on.setStyleSheet("color: grey")
-        vbox_r2.addWidget(label_on)
+        self.label_on = QLabel('提醒事项（内容自动保存）')  # 修改了提示，强调自动保存
+        self.label_on.setFont(self._font)
+        self.label_on.setStyleSheet("color: grey")
+        vbox_r2.addWidget(self.label_on)
         vbox_r2.addWidget(QHLine())  # 水平线
 
         self.e2 = QTextEdit()  # 文本编辑区域
@@ -674,9 +749,13 @@ class Remindme(QWidget):
         hbox_all.addLayout(vbox_r2)  # 添加右侧布局
 
         self.setLayout(hbox_all)
+        if self.label_on is None:
+            print("[错误] self.label_on 未被正确初始化！")
+        else:
+            print(f"[调试] self.label_on 初始化成功！对象地址: {id(self.label_on)}")
 
     def _create_countdown_layout(self):
-        """创建“持续时间”输入的布局 (模式A)。"""
+        """创建"持续时间"输入的布局 (模式A)。"""
         hbox = QHBoxLayout()
         self.countdown_h = QSpinBox()
         self.countdown_h.setMinimum(0)
@@ -691,20 +770,20 @@ class Remindme(QWidget):
         self.countdown_m.setFont(self._font)
         self.countdown_m.setAlignment(Qt.AlignCenter)
 
-        label_h = QLabel('小时')
-        label_h.setFont(self._font)
-        label_m = QLabel('分钟后')
-        label_m.setFont(self._font)
+        self.label_hh = QLabel('小时')
+        self.label_hh.setFont(self._font)
+        self.label_mm = QLabel('分钟后')
+        self.label_mm.setFont(self._font)
 
         hbox.addWidget(self.countdown_h)
-        hbox.addWidget(label_h)
+        hbox.addWidget(self.label_hh)
         hbox.addWidget(self.countdown_m)
-        hbox.addWidget(label_m)
+        hbox.addWidget(self.label_mm)
         hbox.addStretch(1)
         return hbox
 
     def _create_timepoint_layout(self):
-        """创建“定时”输入的布局 (模式B)。"""
+        """创建"定时"输入的布局 (模式B)。"""
         hbox = QHBoxLayout()
         self.time_h = QSpinBox()
         self.time_h.setMinimum(0)
@@ -718,23 +797,23 @@ class Remindme(QWidget):
         self.time_m.setFont(self._font)
         self.time_m.setAlignment(Qt.AlignCenter)
 
-        label_d = QLabel('到')
-        label_d.setFont(self._font)
-        label_h = QLabel('点')
-        label_h.setFont(self._font)
-        label_m = QLabel('分')
-        label_m.setFont(self._font)
+        self.label_d = QLabel('到')
+        self.label_d.setFont(self._font)
+        self.label_h = QLabel('点')
+        self.label_h.setFont(self._font)
+        self.label_m = QLabel('分')
+        self.label_m.setFont(self._font)
 
-        hbox.addWidget(label_d)
+        hbox.addWidget(self.label_d)
         hbox.addWidget(self.time_h)
-        hbox.addWidget(label_h)
+        hbox.addWidget(self.label_h)
         hbox.addWidget(self.time_m)
-        hbox.addWidget(label_m)
+        hbox.addWidget(self.label_m)
         hbox.addStretch(1)
         return hbox
 
     def _create_repeat_layout(self):
-        """创建“重复”输入的布局 (模式C)。"""
+        """创建"重复"输入的布局 (模式C)。"""
         hbox = QHBoxLayout()
         self.check1 = QCheckBox("在", self)  # xx 分时
         self.check1.setFont(self._font)
@@ -746,28 +825,28 @@ class Remindme(QWidget):
         self.every_min.setMaximum(59)
         self.every_min.setFont(self._font)
         self.every_min.setAlignment(Qt.AlignCenter)
-        label_em = QLabel('分时')
-        label_em.setFont(self._font)
+        self.label_em = QLabel('分时')
+        self.label_em.setFont(self._font)
 
         self.interval_min = QSpinBox()  # 每隔 xx 分钟 的分钟输入
         self.interval_min.setMinimum(1)  # 至少间隔1分钟
         self.interval_min.setFont(self._font)
         self.interval_min.setAlignment(Qt.AlignCenter)
-        label_im = QLabel('分钟')
-        label_im.setFont(self._font)
+        self.label_im = QLabel('分钟')
+        self.label_im.setFont(self._font)
 
         hbox.addWidget(self.check1)
         hbox.addWidget(self.every_min)
-        hbox.addWidget(label_em)
+        hbox.addWidget(self.label_em)
         hbox.addSpacing(10)  # 添加一点间距
         hbox.addWidget(self.check2)
         hbox.addWidget(self.interval_min)
-        hbox.addWidget(label_im)
+        hbox.addWidget(self.label_im)
         hbox.addStretch(1)
         return hbox
 
     def _create_button_layout(self):
-        """创建“确定”和“关闭”按钮的布局。"""
+        """创建"确定"和"关闭"按钮的布局。"""
         hbox = QHBoxLayout()
         self.button_confirm = QPushButton("确定")
         self.button_confirm.setFont(self._font)
@@ -910,7 +989,7 @@ class Remindme(QWidget):
         组1: checkA, checkB, checkC (主要提醒模式)
         组2: check1, check2 (重复模式内部选项)
         """
-        # 检查状态是否为“选中”
+        # 检查状态是否为"选中"
         if state == Qt.Checked:
             sender = self.sender()  # 获取信号发送者
 
@@ -933,7 +1012,7 @@ class Remindme(QWidget):
 
     def confirm(self):
         """
-        处理“确定”按钮点击事件。
+        处理"确定"按钮点击事件。
         根据选中的模式 (A, B, 或 C)，执行相应的操作：
         - 计算时间或获取设置值。
         - 获取提醒文本 (从 self.e1)。
@@ -1039,6 +1118,7 @@ class Remindme(QWidget):
                 font = QFont(
                     self._font.family(), self.font_size
                 )  # 使用当前字体家族和新的字体大小
+
                 self.checkA.setFont(font)
                 self.checkB.setFont(font)
                 self.checkC.setFont(font)
@@ -1052,5 +1132,33 @@ class Remindme(QWidget):
                 self.button_cancel.setFont(font)
                 self.e1.setFont(font)
                 self.e2.setFont(font)
+                self.label_d.setFont(font)
+                self.label_h.setFont(font)
+                self.label_m.setFont(font)
+                self.label_im.setFont(font)
+                self.label_em.setFont(font)
+                self.check1.setFont(font)
+                self.check2.setFont(font)
+                self.label_hh.setFont(font)
+                self.label_mm.setFont(font)
+                self.label_r.setFont(font)
+                line_edit = self.time_h.lineEdit()
+                if line_edit:
+                    line_edit.setFont(font)
+                line_edit1 = self.time_m.lineEdit()
+                if line_edit1:
+                    line_edit1.setFont(font)
+                line_edit2 = self.countdown_h.lineEdit()
+                if line_edit2:
+                    line_edit2.setFont(font)
+                line_edit3 = self.countdown_m.lineEdit()
+                if line_edit3:
+                    line_edit3.setFont(font)
+                line_edit4 = self.every_min.lineEdit()
+                if line_edit4:
+                    line_edit4.setFont(font)
+                line_edit5 = self.interval_min.lineEdit()
+                if line_edit5:
+                    line_edit5.setFont(font)
         except Exception as e:
             print(f"[错误] update_font_size: 发生错误: {e}")

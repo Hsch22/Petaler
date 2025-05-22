@@ -1223,21 +1223,81 @@ class PetWidget(QWidget):
             # 捕获其他在尝试获取或设置 sender 文本，或设置 settings 时发生的意外错误
             print(f"[错误] fall_onoff: 执行切换时发生未知错误: {e}")
 
+    def _calculate_popup_position(self, popup_window: QWidget) -> QPoint:
+        """
+        计算弹出窗口的理想位置，确保其完整显示在屏幕内，并优先置于宠物上方。
+
+        Args:
+            popup_window: 需要定位的弹出窗口 (QWidget)。
+
+        Returns:
+            QPoint: 计算得到的最佳左上角位置。
+        """
+        try:
+            screen_rect = QApplication.desktop().screenGeometry()
+            pet_rect = self.geometry()  # 获取宠物主窗口的几何信息
+            popup_rect = (
+                popup_window.frameGeometry()
+            )  # 使用 frameGeometry 获取包含窗口边框的尺寸
+
+            # 理想的X: 使弹出窗口在宠物上方水平居中
+            ideal_x = pet_rect.x() + (pet_rect.width() - popup_rect.width()) // 2
+            # 理想的Y: 使弹出窗口的底部在宠物图像的顶部
+            # 这里假设宠物图像是 PetWidget 的主要内容，或者 PetWidget 本身就是宠物图像
+            ideal_y = pet_rect.y() - popup_rect.height()
+
+            # 确保窗口在屏幕范围内
+            # 调整X坐标
+            if ideal_x < screen_rect.x():
+                ideal_x = screen_rect.x()
+            elif ideal_x + popup_rect.width() > screen_rect.x() + screen_rect.width():
+                ideal_x = screen_rect.x() + screen_rect.width() - popup_rect.width()
+
+            # 调整Y坐标
+            if ideal_y < screen_rect.y():
+                ideal_y = screen_rect.y()
+            elif ideal_y + popup_rect.height() > screen_rect.y() + screen_rect.height():
+                # 如果宠物上方空间不够，尝试放到宠物下方
+                alternative_y = pet_rect.y() + pet_rect.height()
+                if (
+                    alternative_y + popup_rect.height()
+                    <= screen_rect.y() + screen_rect.height()
+                ):
+                    ideal_y = alternative_y
+                else:  # 如果下方空间也不够，则尽量贴近屏幕底部
+                    ideal_y = (
+                        screen_rect.y() + screen_rect.height() - popup_rect.height()
+                    )
+
+            # 再次检查，确保Y不会导致窗口顶部跑到屏幕外或底部超出
+            if ideal_y < screen_rect.y():
+                ideal_y = screen_rect.y()
+            if ideal_y + popup_rect.height() > screen_rect.y() + screen_rect.height():
+                ideal_y = screen_rect.y() + screen_rect.height() - popup_rect.height()
+
+            return QPoint(ideal_x, ideal_y)
+
+        except Exception as e:
+            print(f"[错误] _calculate_popup_position: 计算位置时发生错误: {e}")
+            # 出错时，返回宠物当前位置作为备用
+            return self.pos()
+
     def show_tomato(self):
         """
         控制番茄钟设置窗口的显示或取消正在运行的番茄钟。
-
-        行为逻辑：
-        1. 如果番茄钟设置窗口 (`self.tomato_window`) 当前可见，则将其隐藏。
-        2. 如果设置窗口不可见，并且番茄钟状态为"正在运行"（通过 `self.tomato_clock` 的文本判断为 "取消番茄时钟"），则：
-           - 将 `self.tomato_clock` 文本改回 "番茄时钟"。
-           - 调用调度器 (`self.workers['Scheduler']`) 的 `cancel_tomato` 方法。
-           - 隐藏番茄钟相关的图标 (`self.tomatoicon`) 和时间显示 (`self.tomato_time`)。
-        3. 如果设置窗口不可见，并且番茄钟状态为"未运行"（文本为 "番茄时钟"），则：
-           - 将设置窗口移动到当前主窗口的位置 (`self.pos()`)。
-           - 显示设置窗口 (`self.tomato_window`)。
         """
         try:
+            if not hasattr(self, 'tomato_window') or self.tomato_window is None:
+                print("[警告] show_tomato: tomato_window 未初始化或为 None。")
+                # 可以选择在这里尝试重新初始化，或者直接返回
+                # self.tomato_window = Tomato() # 示例：尝试重新初始化
+                # if self.tomato_window:
+                #     self.tomato_window.close_tomato.connect(self.show_tomato)
+                #     self.tomato_window.confirm_tomato.connect(self.run_tomato)
+                # else:
+                #     print("[严重错误] show_tomato: 无法重新初始化 tomato_window。")
+                return
+
             if self.tomato_window.isVisible():
                 # 场景 1: 设置窗口可见，直接隐藏它
                 self.tomato_window.hide()
@@ -1261,8 +1321,10 @@ class PetWidget(QWidget):
 
             else:
                 # 场景 3: 未运行番茄钟，显示设置窗口
-                current_pos = self.pos()  # 获取当前窗口位置
-                self.tomato_window.move(current_pos)  # 移动设置窗口到该位置
+                # current_pos = self.pos()  # 获取当前窗口位置 # 旧代码
+                # self.tomato_window.move(current_pos)  # 移动设置窗口到该位置 # 旧代码
+                new_pos = self._calculate_popup_position(self.tomato_window)
+                self.tomato_window.move(new_pos)
                 self.tomato_window.show()  # 显示设置窗口
 
         except AttributeError as e:
@@ -1420,8 +1482,8 @@ class PetWidget(QWidget):
             else:
                 # 场景 3: 未运行专注任务，显示设置窗口
                 # (隐含条件: self.focus_clock.text() == "专注时间")
-                current_pos = self.pos()  # 获取当前窗口位置
-                self.focus_window.move(current_pos)  # 移动设置窗口到该位置
+                new_pos = self._calculate_popup_position(self.focus_window)
+                self.focus_window.move(new_pos)
                 self.focus_window.show()  # 显示设置窗口
 
         except AttributeError as e:
@@ -1588,34 +1650,8 @@ class PetWidget(QWidget):
             else:
                 # 场景 2: 窗口隐藏，计算位置并显示
                 try:
-                    current_pos = self.pos()
-                    if current_pos is None:
-                        print(
-                            f"[错误] show_remind: 'self.pos()' 返回了 None。无法计算窗口位置。"
-                        )
-                        return  # 中止
-
-                    # 检查 current_pos 是否有 x, y 方法
-                    if not (
-                        hasattr(current_pos, 'x')
-                        and callable(current_pos.x)
-                        and hasattr(current_pos, 'y')
-                        and callable(current_pos.y)
-                    ):
-                        print(
-                            f"[错误] show_remind: 'self.pos()' 返回的对象缺少 x 或 y 方法。无法计算窗口位置。"
-                        )
-                        return
-
-                    # 检查 width, height 是否返回数字
-                    win_width = self.remind_window.width()
-                    win_height = self.remind_window.height()
-
-                    # 计算新位置 (主窗口上方居中)
-                    new_x = current_pos.x() - win_width // 2
-                    new_y = current_pos.y() - win_height
-
-                    self.remind_window.move(new_x, new_y)  # 确保传入整数
+                    new_pos = self._calculate_popup_position(self.remind_window)
+                    self.remind_window.move(new_pos)
                     self.remind_window.show()
 
                 except (TypeError, ValueError) as e:
