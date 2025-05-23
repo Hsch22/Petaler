@@ -591,7 +591,10 @@ class Scheduler_worker(QObject):
             except Exception as fallback_e:
                 return f"获取天气信息失败 (备选方案尝试失败): {fallback_e}"
         except Exception as e:
-            return f"获取天气信息失败: {e}"
+            print(
+                f"获取天气信息时发生错误: 城市='{city_for_weather}', 类型={type(e)}, 错误详情={repr(e)}"
+            )
+            return f"获取天气信息失败: 类型={type(e)}, 错误={repr(e)}"
 
     def __init__(self, pet_conf, parent=None):
         """
