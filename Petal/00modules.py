@@ -16,13 +16,13 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal
 
 from typing import List
 
-from Petaler.utils import *
-from Petaler.conf import *
+from Petal.utils import *
+from Petal.conf import *
 
 #from win32api import GetMonitorInfo, MonitorFromPoint
 
 
-import Petaler.settings as settings
+import Petal.settings as settings
 
 
 class Animation_worker(QObject):

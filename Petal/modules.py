@@ -21,10 +21,10 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal
 
 from typing import List, Optional
 
-from Petaler.utils import *
-from Petaler.conf import *
+from Petal.utils import *
+from Petal.conf import *
 
-import Petaler.settings as settings
+from Petal.settings import Settings
 
 
 class Animation_worker(QObject):
@@ -41,7 +41,7 @@ class Animation_worker(QObject):
     )  # 请求移动宠物的信号 (dx, dy)
     sig_repaint_anim = pyqtSignal(name='sig_repaint_anim')  # 请求重绘的信号
 
-    def __init__(self, pet_conf: PetConfig, parent: Optional[QObject] = None) -> None:
+    def __init__(self, pet_conf: PetConfig, parent: Optional[QObject] = None, settings : Settings = None) -> None:
         """
         初始化动画工作线程。
         """
@@ -49,6 +49,7 @@ class Animation_worker(QObject):
         self.pet_conf: PetConfig = pet_conf
         self.is_killed: bool = False  # 线程是否被标记为终止
         self.is_paused: bool = False  # 线程是否被标记为暂停
+        self.settings: Settings = settings
 
     def run(self) -> None:
         """
@@ -141,8 +142,8 @@ class Animation_worker(QObject):
 
                 # --- 更新图像 ---
                 # 注意：直接修改全局 settings 模块中的图像变量
-                settings.previous_img = settings.current_img
-                settings.current_img = img
+                self.settings.previous_img = self.settings.current_img
+                self.settings.current_img = img
                 self.sig_setimg_anim.emit()  # 发送信号，请求UI更新图像
 
                 # --- 帧间延迟 ---
@@ -252,7 +253,7 @@ class Interaction_worker(QObject):
     sig_move_inter = pyqtSignal(float, float, name='sig_move_inter')
     sig_act_finished = pyqtSignal()
 
-    def __init__(self, pet_conf, parent=None):
+    def __init__(self, pet_conf, parent=None, settings : Settings = None):
         """
         初始化 Interaction_worker。
         """
@@ -271,6 +272,7 @@ class Interaction_worker(QObject):
         self.timer.timeout.connect(self.run)
         # 启动定时器，间隔时间由宠物配置中的 interact_speed 决定 (毫秒)
         self.timer.start(int(self.pet_conf.interact_speed))
+        self.settings = settings
 
     def run(self):
         """
@@ -333,13 +335,13 @@ class Interaction_worker(QObject):
         """
 
         # 如果当前动作发生变化
-        if settings.current_act != act:
+        if self.settings.current_act != act:
             # 将之前的当前动作存为上一个动作
-            settings.previous_act = settings.current_act
+            self.settings.previous_act = self.settings.current_act
             # 更新当前动作
-            settings.current_act = act
+            self.settings.current_act = act
             # 重置当前动作的播放帧索引
-            settings.playid = 0
+            self.settings.playid = 0
 
         # 计算每张图片需要重复显示的次数 (基于动作帧刷新率和 InteractionWorker 的更新速度)
         # math.ceil 确保至少重复一次
@@ -349,18 +351,18 @@ class Interaction_worker(QObject):
             item for item in act.images for i in range(n_repeat)
         ] * act.act_num
         # 从扩展列表中获取当前 playid 对应的图像
-        img = img_list_expand[settings.playid]
+        img = img_list_expand[self.settings.playid]
 
         # 播放索引加 1
-        settings.playid += 1
+        self.settings.playid += 1
         # 如果播放索引超出了扩展列表的长度，则重置为 0，实现循环播放
-        if settings.playid >= len(img_list_expand):
-            settings.playid = 0
+        if self.settings.playid >= len(img_list_expand):
+            self.settings.playid = 0
 
         # 更新上一帧图像
-        settings.previous_img = settings.current_img
+        self.settings.previous_img = self.settings.current_img
         # 更新当前帧图像
-        settings.current_img = img
+        self.settings.current_img = img
 
     def animat(self, act_name):
         """
@@ -373,16 +375,16 @@ class Interaction_worker(QObject):
         acts = self.pet_conf.random_act[acts_index]
 
         # 检查当前动作序列的索引 (settings.act_id) 是否已超出序列长度
-        if settings.act_id >= len(acts):
+        if self.settings.act_id >= len(acts):
             # 如果动画序列播放完毕，重置动作序列索引
-            settings.act_id = 0
+            self.settings.act_id = 0
             # 清除当前交互方法名，停止 animat 的后续调用
             self.interact = None
             # 发出动作完成信号
             self.sig_act_finished.emit()
         else:
             # 获取当前要执行的动作对象
-            act = acts[settings.act_id]
+            act = acts[self.settings.act_id]
             # 计算当前动作需要执行的总帧数 (考虑图像重复和动作次数)
             n_repeat = math.ceil(
                 act.frame_refresh / (self.pet_conf.interact_speed / 1000)
@@ -392,12 +394,12 @@ class Interaction_worker(QObject):
             # 计算并设置当前帧图像
             self.img_from_act(act)
 
-            if settings.playid >= n_repeat - 1:
+            if self.settings.playid >= n_repeat - 1:
                 # 增加动作序列索引，准备执行下一个动作
-                settings.act_id += 1
+                self.settings.act_id += 1
 
             # 如果计算出的当前图像与上一帧不同，则需要更新显示和移动
-            if settings.previous_img != settings.current_img:
+            if self.settings.previous_img != self.settings.current_img:
                 # 发出设置图像信号
                 self.sig_setimg_inter.emit()
                 # 根据当前动作的定义进行移动
@@ -409,50 +411,50 @@ class Interaction_worker(QObject):
         根据是否启用掉落、是否在地面上、是否正在拖拽，执行不同的行为。
         """
         # 情况 1: 掉落行为被禁用 (settings.set_fall == 0)
-        if not settings.set_fall:
+        if not self.settings.set_fall:
             # 如果正在拖拽 (settings.draging == 1)
-            if settings.draging == 1:
+            if self.settings.draging == 1:
                 # 获取拖拽动画对应的动作对象
                 acts = self.pet_conf.drag
                 # 计算并设置拖拽动画的当前帧图像
                 self.img_from_act(acts)
                 # 如果图像有变化，发出更新图像信号
-                if settings.previous_img != settings.current_img:
+                if self.settings.previous_img != self.settings.current_img:
                     self.sig_setimg_inter.emit()
             # 如果停止拖拽
             else:
                 # 清除动作名
                 self.act_name = None
                 # 重置播放帧索引
-                settings.playid = 0
+                self.settings.playid = 0
 
         # 情况 2: 掉落行为已启用 (settings.set_fall == 1) 且宠物不在地面上 (settings.onfloor == 0)
-        elif settings.set_fall == 1 and settings.onfloor == 0:
+        elif self.settings.set_fall == 1 and self.settings.onfloor == 0:
             # 如果正在拖拽 (settings.draging == 1)
-            if settings.draging == 1:
+            if self.settings.draging == 1:
                 # 获取拖拽动画对应的动作对象
                 acts = self.pet_conf.drag
                 # 计算并设置拖拽动画的当前帧图像
                 self.img_from_act(acts)
                 # 如果图像有变化，发出更新图像信号
-                if settings.previous_img != settings.current_img:
+                if self.settings.previous_img != self.settings.current_img:
                     self.sig_setimg_inter.emit()
             # 如果停止拖拽 (settings.draging == 0)，则开始掉落
-            elif settings.draging == 0:
+            elif self.settings.draging == 0:
                 # 获取掉落动画对应的动作对象
                 acts = self.pet_conf.fall
                 # 计算并设置掉落动画的当前帧图像
                 self.img_from_act(acts)
 
                 # 如果需要向右镜像掉落图像
-                if settings.fall_right:
+                if self.settings.fall_right:
                     # 保存原始图像引用
-                    previous_img_state = settings.current_img
+                    previous_img_state = self.settings.current_img
                     # 水平镜像当前图像
-                    settings.current_img = settings.current_img.mirrored(True, False)
+                    self.settings.current_img = self.settings.current_img.mirrored(True, False)
 
                 # 如果图像（或其镜像状态）有变化，发出更新图像信号
-                if settings.previous_img != settings.current_img:
+                if self.settings.previous_img != self.settings.current_img:
                     self.sig_setimg_inter.emit()
 
                 # 执行掉落位移计算
@@ -463,7 +465,7 @@ class Interaction_worker(QObject):
             # 清除动作名
             self.act_name = None
             # 重置播放帧索引
-            settings.playid = 0
+            self.settings.playid = 0
 
     def drop(self):
         """
@@ -472,17 +474,17 @@ class Interaction_worker(QObject):
         """
 
         # 获取当前的垂直速度作为本次的 y 轴位移增量
-        plus_y = settings.dragspeedy
+        plus_y = self.settings.dragspeedy
         # 获取当前的水平速度作为本次的 x 轴位移增量
-        plus_x = settings.dragspeedx
+        plus_x = self.settings.dragspeedx
 
         # 只有速度大于阈值时才施加阻力
-        if abs(settings.dragspeedx) > settings.drag_speed_threshold:
-            settings.dragspeedx *= 1 - settings.drag_base_friction
-        if abs(settings.dragspeedy) > settings.drag_speed_threshold:
-            settings.dragspeedy *= 1 - settings.drag_base_friction
+        if abs(self.settings.dragspeedx) > self.settings.drag_speed_threshold:
+            self.settings.dragspeedx *= 1 - self.settings.drag_base_friction
+        if abs(self.settings.dragspeedy) > self.settings.drag_speed_threshold:
+            self.settings.dragspeedy *= 1 - self.settings.drag_base_friction
         # 更新垂直速度，模拟重力加速度
-        settings.dragspeedy = settings.dragspeedy + self.pet_conf.gravity
+        self.settings.dragspeedy = self.settings.dragspeedy + self.pet_conf.gravity
 
         # 发出移动信号，请求主界面根据计算出的位移移动宠物
         self.sig_move_inter.emit(plus_x, plus_y)
@@ -596,7 +598,7 @@ class Scheduler_worker(QObject):
             )
             return f"获取天气信息失败: 类型={type(e)}, 错误={repr(e)}"
 
-    def __init__(self, pet_conf, parent=None):
+    def __init__(self, pet_conf, parent=None, settings : Settings = None):
         """
         初始化 Scheduler_worker。
         """
@@ -627,6 +629,8 @@ class Scheduler_worker(QObject):
         )
         self.scheduler.start()
 
+        self.settings = settings
+
     def run(self):
         """
         工作线程的入口点。
@@ -645,14 +649,14 @@ class Scheduler_worker(QObject):
         else:
             base_greeting_text = '晚上好!'
 
-        print(f"[Petaler Log] 显示快速问候: {base_greeting_text}")
+        print(f"[Petal Log] 显示快速问候: {base_greeting_text}")
         self.show_dialogue([base_greeting_text])  # 显示此部分，应较快出现
 
         # 2. 获取天气信息 (此部分可能耗时较长)
-        print("[Petaler Log] 开始获取天气信息...")
+        print("[Petal Log] 开始获取天气信息...")
         # _get_weather_string 返回完整的用户可见字符串，例如 "当前城市：北京，天气：晴，温度：20°C" 或错误/状态信息
         weather_info_string = asyncio.run(self._get_weather_string())
-        print(f"[Petaler Log] 获取到的天气信息字符串: {weather_info_string}")
+        print(f"[Petal Log] 获取到的天气信息字符串: {weather_info_string}")
 
         # 3. 显示天气信息作为单独的对话
         #    (除非天气信息获取失败导致返回的是提示信息，否则才显示)
@@ -729,10 +733,10 @@ class Scheduler_worker(QObject):
         避免同时显示多个对话框造成混乱。
         """
         # 等待：如果当前已有对话框在显示，则循环等待
-        while settings.showing_dialogue_now:
+        while self.settings.showing_dialogue_now:
             time.sleep(1)  # 等待1秒再检查
         # 标记：设置全局标志，表示现在开始显示对话框
-        settings.showing_dialogue_now = True
+        self.settings.showing_dialogue_now = True
 
         # 遍历要显示的文本列表
         for text_toshow in texts_toshow:
@@ -744,7 +748,7 @@ class Scheduler_worker(QObject):
         # 完成：所有文本显示完毕后，发出信号请求清除文本显示
         self.sig_settext_sche.emit('None')  # 'None' 作为清除文本的约定信号
         # 标记：清除全局标志，允许其他对话请求
-        settings.showing_dialogue_now = False
+        self.settings.showing_dialogue_now = False
 
     def add_tomato(self, n_tomato=None):
         """

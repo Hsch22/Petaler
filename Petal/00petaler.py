@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Petaler 核心 UI 模块 - Petaler.py
+Petal 核心 UI 模块 - Petal.py
 """
 
 
@@ -19,13 +19,13 @@ from PyQt5.QtGui import (QCursor, QFont, QFontDatabase, QIcon, QImage, QPainter,
 from PyQt5.QtWidgets import *
 
 
-from Petaler.modules import * 
-from Petaler.utils import *  
-from Petaler.conf import *    
-from Petaler.extra_windows import * 
+from Petal.modules import *
+from Petal.utils import *
+from Petal.conf import *
+from Petal.extra_windows import *
 
 
-import Petaler.settings as settings
+import Petal.settings as settings
 
 
 settings.init()

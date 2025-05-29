@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Petaler 核心 UI 模块 - Petaler.py
+Petal 核心 UI 模块 - Petal.py
 """
 
 
@@ -19,16 +19,12 @@ from PyQt5.QtGui import QCursor, QFont, QFontDatabase, QIcon, QImage, QPainter, 
 from PyQt5.QtWidgets import *
 
 
-from Petaler.modules import *
-from Petaler.utils import *
-from Petaler.conf import *
-from Petaler.extra_windows import *
+from Petal.modules import *
+from Petal.utils import *
+from Petal.conf import *
+from Petal.extra_windows import *
 
-
-import Petaler.settings as settings
-
-
-settings.init()
+from Petal.settings import Settings
 
 # 修改 screen_scale 的获取方式
 if sys.platform == "win32":
@@ -72,7 +68,8 @@ class PetWidget(QWidget):
 
         # --- 核心数据属性初始化 ---
         self.pets: tuple = pets  # 存储所有可用宠物的名称元组
-        self.curr_pet_name: str = ''  # 当前激活的宠物名称 (将在 init_conf 中设置)
+        self.settings: Settings = Settings()
+        self.curr_pet_name = curr_pet_name  # 当前激活的宠物名称 (将在 init_conf 中设置)
         self.pet_conf: PetConfig = (
             PetConfig()
         )  # 宠物配置对象 (将在 init_conf 中加载实际配置)
@@ -180,15 +177,15 @@ class PetWidget(QWidget):
             # 3. 更新全局状态 (通过 settings 模块)
             # - onfloor=0: 表示宠物离开地面（被提起）
             # - draging=1: 表示拖动状态开始
-            settings.onfloor = 0
-            settings.draging = 1
+            self.settings.onfloor = 0
+            self.settings.draging = 1
 
             # 4. 控制动画/交互工作线程
             #    - 暂停常规动画循环
             if 'Animation' in self.workers:  # 增加检查，避免KeyError
                 self.workers['Animation'].pause()
             #    - 启动专门处理鼠标拖动的交互逻辑
-            if 'Interaction' in self.workers:  # 增加检查，避免KeyError
+            if 'Interaction' in self.workers: #  增加检查，避免KeyError
                 self.workers['Interaction'].start_interact('mousedrag')
 
             # 5. 接受事件，表示已处理，阻止其进一步传播
@@ -199,6 +196,7 @@ class PetWidget(QWidget):
         # 如果是其他鼠标按钮（例如中键），则不执行任何操作
 
     def mouseMoveEvent(self, event) -> None:
+        print(f"[{self.curr_pet_name}] moving")
         """
         处理鼠标移动事件，核心功能是实现窗口拖动。
 
@@ -223,16 +221,16 @@ class PetWidget(QWidget):
         current_cursor_pos = QCursor.pos()  # 获取一次当前位置，避免重复调用
 
         # 更新 X 坐标历史
-        settings.mouseposx4 = settings.mouseposx3
-        settings.mouseposx3 = settings.mouseposx2
-        settings.mouseposx2 = settings.mouseposx1
-        settings.mouseposx1 = current_cursor_pos.x()
+        self.settings.mouseposx4 = self.settings.mouseposx3
+        self.settings.mouseposx3 = self.settings.mouseposx2
+        self.settings.mouseposx2 = self.settings.mouseposx1
+        self.settings.mouseposx1 = current_cursor_pos.x()
 
         # 更新 Y 坐标历史
-        settings.mouseposy4 = settings.mouseposy3
-        settings.mouseposy3 = settings.mouseposy2
-        settings.mouseposy2 = settings.mouseposy1
-        settings.mouseposy1 = current_cursor_pos.y()
+        self.settings.mouseposy4 = self.settings.mouseposy3
+        self.settings.mouseposy3 = self.settings.mouseposy2
+        self.settings.mouseposy2 = self.settings.mouseposy1
+        self.settings.mouseposy1 = current_cursor_pos.y()
 
         # --- 事件处理完毕 ---
         # 接受事件，表示我们已经处理了这次移动，阻止它被其他组件处理。
@@ -258,12 +256,12 @@ class PetWidget(QWidget):
 
         # 更新全局拖动状态标记
         # settings.onfloor 保持为 0 (可能仍在空中)，落地状态由后续逻辑处理
-        settings.draging = 0  # 明确标记拖动已结束
+        self.settings.draging = 0  # 明确标记拖动已结束
 
         # --- 步骤 2: 根据是否启用掉落，执行不同逻辑 ---
-        fall_enabled = settings.set_fall == 1
+        self.fall_enabled = self.settings.set_fall == 1
 
-        if fall_enabled:
+        if self.fall_enabled:
             # === 情况 A: 启用掉落 (set_fall == 1) ===
             self._handle_fall_on_release()
         else:
@@ -276,20 +274,20 @@ class PetWidget(QWidget):
         """处理启用掉落时，鼠标左键释放的逻辑。"""
         # 1. 计算释放时的瞬时速度
         #    使用历史位置点 (1 和 3) 来估算速度，并应用修正系数。
-        delta_x = settings.mouseposx1 - settings.mouseposx3
-        delta_y = settings.mouseposy1 - settings.mouseposy3
+        self.delta_x = self.settings.mouseposx1 - self.settings.mouseposx3
+        self.delta_y = self.settings.mouseposy1 - self.settings.mouseposy3
         # 注意：这里的 '/ 2' 可能代表时间间隔（假设两次采样间隔固定），
         # 或者只是一个经验性的平滑因子。
-        settings.dragspeedx = (delta_x / 2) * settings.fixdragspeedx
-        settings.dragspeedy = (delta_y / 2) * settings.fixdragspeedy
+        self.settings.dragspeedx = (self.delta_x / 2) * self.settings.fixdragspeedx
+        self.settings.dragspeedy = (self.delta_y / 2) * self.settings.fixdragspeedy
 
         # 2. 重置用于计算速度的历史位置 (避免影响下次拖动)
-        settings.mouseposx1 = settings.mouseposx3 = 0
-        settings.mouseposy1 = settings.mouseposy3 = 0
+        self.settings.mouseposx1 = self.settings.mouseposx3 = 0
+        self.settings.mouseposy1 = self.settings.mouseposy3 = 0
         # 注意：只重置了 1 和 3，可能 2/4/5 在其他地方仍有用途？(按原逻辑保留)
 
         # 3. 确定掉落动画的初始方向
-        settings.fall_right = 1 if settings.dragspeedx > 0 else 0
+        self.settings.fall_right = 1 if self.settings.dragspeedx > 0 else 0
 
         # 后续的掉落动画和物理效果应由 Interaction_worker 或类似机制接管处理
 
@@ -303,8 +301,8 @@ class PetWidget(QWidget):
         # 2. 显式设置回默认图像 (以防 _move_customized 未触发图像更新)
         try:
             # 确保配置和图像列表存在
-            default_image = self.pet_conf.default.images[0]
-            settings.current_img = default_image
+            self.default_image = self.pet_conf.default.images[0]
+            self.settings.current_img = self.default_image
             self.set_img()  # 更新显示的图像
         except (AttributeError, IndexError, TypeError) as e:
             # 更详细的错误处理
@@ -332,8 +330,8 @@ class PetWidget(QWidget):
         # --- 窗口样式与行为设置 ---
         # 组合窗口标志：无边框，总在最前，作为子窗口（通常用于不显示在任务栏）
         # 使用 "|" 操作符合并多个标志位
-        window_flags = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow
-        self.setWindowFlags(window_flags)
+        self.window_flags = Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow
+        self.setWindowFlags(self.window_flags)
 
         # 设置背景透明
         self.setAutoFillBackground(False)  # 禁用自动填充背景，配合下面的透明属性
@@ -683,7 +681,7 @@ class PetWidget(QWidget):
 
         # 清除可能存在的旧对话框
         self._set_dialogue_dp('None')
-        settings.showing_dialogue_now = False
+        self.settings.showing_dialogue_now = False
 
         # 步骤 2: 加载并初始化新宠物的配置和资源
         self.init_conf(pet_name)
@@ -776,9 +774,9 @@ class PetWidget(QWidget):
 
         # 4. 更新宠物显示的图片
         # -----------------------
-        settings.previous_img = settings.current_img
+        self.settings.previous_img = self.settings.current_img
         if pic_dict:  # 确保 pic_dict 不为空
-            settings.current_img = list(pic_dict.values())[0]
+            self.settings.current_img = list(pic_dict.values())[0]
         else:
             print("警告：pic_dict 为空，无法设置当前图片。")
 
@@ -865,23 +863,23 @@ class PetWidget(QWidget):
         # 1. 调整 QLabel (self.label) 的尺寸以完全匹配新图像的宽度和高度
         #    确保标签大小正好能容纳整个图片
         try:
-            image_width = settings.current_img.width()
-            image_height = settings.current_img.height()
+            image_width = self.settings.current_img.width()
+            image_height = self.settings.current_img.height()
             self.label.resize(image_width, image_height)
         except AttributeError:
             print(
-                f"错误：无法从 settings.current_img 获取尺寸。请确保它是一个有效的 QImage 对象。"
+                f"错误：无法从 self.settings.current_img 获取尺寸。请确保它是一个有效的 QImage 对象。"
             )
             # 可以选择在这里返回或设置一个默认图片/尺寸
             return
 
         # 2. 将 QImage (settings.current_img) 转换为 QPixmap 并设置为 QLabel 的内容
         #    QPixmap 是专门用于在屏幕上显示的优化图像格式
-        self.label.setPixmap(QPixmap.fromImage(settings.current_img))
+        self.label.setPixmap(QPixmap.fromImage(self.settings.current_img))
 
         # 3. 将当前的 QImage 对象也保存到实例变量 self.image 中
         #    这个副本的具体用途需要结合其他使用 self.image 的代码来理解
-        self.image = settings.current_img
+        self.image = self.settings.current_img
 
     def _set_dialogue_dp(self, texts='None'):
         """
@@ -1200,11 +1198,11 @@ class PetWidget(QWidget):
 
             if current_text == "禁用掉落":
                 sender.setText("开启掉落")
-                settings.set_fall = 0
+                self.settings.set_fall = 0
 
             elif current_text == "开启掉落":
                 sender.setText("禁用掉落")
-                settings.set_fall = 1
+                self.settings.set_fall = 1
 
             else:
                 print(
@@ -1214,11 +1212,11 @@ class PetWidget(QWidget):
         except AttributeError as e:
             # 捕获访问 settings.set_fall 可能出现的属性错误
             print(
-                f"[错误] fall_onoff: 访问 settings.set_fall 时出错: {e}。请确保 settings 对象及其属性已正确初始化。"
+                f"[错误] fall_onoff: 访问 self.settings.set_fall 时出错: {e}。请确保 self.settings 对象及其属性已正确初始化。"
             )
         except NameError as e:
             # 捕获 settings 对象本身未定义的情况
-            print(f"[错误] fall_onoff: 全局 settings 对象未定义: {e}。")
+            print(f"[错误] fall_onoff: 全局 self.settings 对象未定义: {e}。")
         except Exception as e:
             # 捕获其他在尝试获取或设置 sender 文本，或设置 settings 时发生的意外错误
             print(f"[错误] fall_onoff: 执行切换时发生未知错误: {e}")
@@ -1765,7 +1763,7 @@ class PetWidget(QWidget):
                 del self.threads[module_name]
                 return
             try:
-                self.workers[module_name] = Animation_worker(self.pet_conf)
+                self.workers[module_name] = Animation_worker(self.pet_conf, settings = self.settings)
             except Exception as e:
                 print(f"[错误] runAnimation: 创建 'Animation_worker' 实例失败: {e}")
                 del self.threads[module_name]  # 清理线程
@@ -1779,23 +1777,23 @@ class PetWidget(QWidget):
 
             # 5. 连接工作者信号到主线程槽函数
             #    需要确保 worker 有这些信号，主线程有这些槽函数
-            worker = self.workers[module_name]
-            if hasattr(worker, 'sig_setimg_anim'):
-                worker.sig_setimg_anim.connect(self.set_img)
+            self.worker = self.workers[module_name]
+            if hasattr(self.worker, 'sig_setimg_anim'):
+                self.worker.sig_setimg_anim.connect(self.set_img)
             else:
                 print(
                     f"[警告] runAnimation: Animation_worker 缺少 sig_setimg_anim 信号。"
                 )
 
-            if hasattr(worker, 'sig_move_anim'):
-                worker.sig_move_anim.connect(self._move_customized)
+            if hasattr(self.worker, 'sig_move_anim'):
+                self.worker.sig_move_anim.connect(self._move_customized)
             else:
                 print(
                     f"[警告] runAnimation: Animation_worker 缺少 sig_move_anim 信号。"
                 )
 
-            if hasattr(worker, 'sig_repaint_anim'):
-                worker.sig_repaint_anim.connect(self.repaint)
+            if hasattr(self.worker, 'sig_repaint_anim'):
+                self.worker.sig_repaint_anim.connect(self.repaint)
             else:
                 print(
                     f"[警告] runAnimation: Animation_worker 缺少 sig_repaint_anim 信号。"
@@ -1825,6 +1823,7 @@ class PetWidget(QWidget):
             if module_name in self.workers:
                 del self.workers[module_name]
 
+
     def runInteraction(self):
         """
         初始化并启动交互处理的后台线程和工作者对象。
@@ -1846,7 +1845,7 @@ class PetWidget(QWidget):
 
             # 2. 创建
             try:
-                self.workers[module_name] = Interaction_worker(self.pet_conf)
+                self.workers[module_name] = Interaction_worker(self.pet_conf, settings = self.settings)
             except Exception as e:
                 print(f"[错误] runInteraction: 创建 'Interaction_worker' 实例失败: {e}")
                 del self.threads[module_name]
@@ -1856,23 +1855,23 @@ class PetWidget(QWidget):
             self.workers[module_name].moveToThread(self.threads[module_name])
 
             # 4. 连接工作者信号到主线程槽
-            worker = self.workers[module_name]
-            if hasattr(worker, 'sig_setimg_inter'):
-                worker.sig_setimg_inter.connect(self.set_img)
+            self.worker = self.workers[module_name]
+            if hasattr(self.worker, 'sig_setimg_inter'):
+                self.worker.sig_setimg_inter.connect(self.set_img)
             else:
                 print(
                     f"[警告] runInteraction: Interaction_worker 缺少 sig_setimg_inter 信号。"
                 )
 
-            if hasattr(worker, 'sig_move_inter'):
-                worker.sig_move_inter.connect(self._move_customized)
+            if hasattr(self.worker, 'sig_move_inter'):
+                self.worker.sig_move_inter.connect(self._move_customized)
             else:
                 print(
                     f"[警告] runInteraction: Interaction_worker 缺少 sig_move_inter 信号。"
                 )
 
-            if hasattr(worker, 'sig_act_finished'):
-                worker.sig_act_finished.connect(self.resume_animation)
+            if hasattr(self.worker, 'sig_act_finished'):
+                self.worker.sig_act_finished.connect(self.resume_animation)
             else:
                 print(
                     f"[警告] runInteraction: Interaction_worker 缺少 sig_act_finished 信号。"
@@ -1916,7 +1915,7 @@ class PetWidget(QWidget):
 
             # 2. 创建调度器工作者
             try:
-                self.workers[scheduler_module_name] = Scheduler_worker(self.pet_conf)
+                self.workers[scheduler_module_name] = Scheduler_worker(self.pet_conf, settings = self.settings)
             except Exception as e:
                 print(f"[错误] runScheduler: 创建 'Scheduler_worker' 实例失败: {e}")
                 del self.threads[scheduler_module_name]
@@ -1932,7 +1931,7 @@ class PetWidget(QWidget):
             )
 
             # 4. 连接工作者信号到主线程槽
-            worker = self.workers[scheduler_module_name]
+            self.worker = self.workers[scheduler_module_name]
             signals_to_connect = {
                 'sig_settext_sche': self._set_dialogue_dp,
                 'sig_setact_sche': self._show_act,
@@ -1942,8 +1941,8 @@ class PetWidget(QWidget):
                 'sig_settime_sche': self._change_time,
             }
             for signal_name, slot_func in signals_to_connect.items():
-                if hasattr(worker, signal_name):
-                    getattr(worker, signal_name).connect(slot_func)
+                if hasattr(self.worker, signal_name):
+                    getattr(self.worker, signal_name).connect(slot_func)
                 else:
                     print(
                         f"[警告] runScheduler: Scheduler_worker 缺少 {signal_name} 信号。"
@@ -2012,10 +2011,10 @@ class PetWidget(QWidget):
                 new_y = self.floor_pos  # 固定在地面上
 
                 try:
-                    if settings.onfloor == 0:
-                        settings.onfloor = 1  # 标记为在地面上
+                    if self.settings.onfloor == 0:
+                        self.settings.onfloor = 1  # 标记为在地面上
                         # 设置默认站立图片
-                        settings.current_img = self.pet_conf.default.images[0]
+                        self.settings.current_img = self.pet_conf.default.images[0]
                         self.set_img()  # 更新显示图片
                         # 恢复动画
                         self.workers['Animation'].resume()
@@ -2072,6 +2071,13 @@ class PetWidget(QWidget):
         或者在需要手动恢复动画的场景下使用。
         """
         self.workers['Animation'].resume()
+
+    def __del__(self):
+        self.stop_thread('Animation')
+        self.stop_thread('Interaction')
+        self.stop_thread('Scheduler')
+        pass
+
 
 
 def _load_all_pic(pet_name: str) -> dict:

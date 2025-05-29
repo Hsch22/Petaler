@@ -71,7 +71,7 @@ class Tomato(QWidget):
             # --- 配置常量 ---
             self._fixed_width = 250
             self._fixed_height = 100
-            self._font_path = 'res/font/MFNaiSi_Noncommercial-Regular.otf'
+            self._font_path = '../res/font/MFNaiSi_Noncommercial-Regular.otf'
             # 字体名称最好是字体文件实际包含的名称，或者是一个可靠的回退字体
             self._font_family_primary = 'MF NaiSi (Noncommercial)'
             self._font_family_fallback = '宋体'  # 回退字体
