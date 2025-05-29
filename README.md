@@ -82,7 +82,7 @@ StartFromZero/
 2.  **启动应用**:
     在项目根目录 `StartFromZero/`下，执行：
     ```bash
-    python run_Petaler.py
+    python run_Petal.py
     ```
     成功后，你的桌面宠物便会出现。
 

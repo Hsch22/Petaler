@@ -4,7 +4,7 @@ from Mainwindow.SideBar import SideBar
 from Mainwindow.Signals import Signals
 from Mainwindow.FontSetting import set_font
 
-import Petal.run_Petaler as petal
+import Petal.run_Petal as petal
 from Petal.utils import read_json
 
 log = logging.getLogger(__name__)
