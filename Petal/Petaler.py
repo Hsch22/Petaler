@@ -47,7 +47,7 @@ else:
 class PetWidget(QWidget):
 
     def __init__(
-        self, parent: Optional[QWidget] = None, curr_pet_name: str = '', pets: tuple = ()
+        self, parent: Optional[QWidget] = None, curr_pet_name: str = '', pets: tuple = (), main_window : QMainWindow = None
     ):
         """
         初始化宠物窗口部件。
@@ -73,6 +73,7 @@ class PetWidget(QWidget):
         self.pet_conf: PetConfig = (
             PetConfig()
         )  # 宠物配置对象 (将在 init_conf 中加载实际配置)
+        self.main_window = main_window
 
         self.image: Optional[QImage] = None  # 当前用于显示的 QImage 对象
         self.tray: Optional[QSystemTrayIcon]= None  # 系统托盘图标实例
@@ -675,6 +676,8 @@ class PetWidget(QWidget):
         # 步骤 1: 停止当前宠物的所有相关活动线程
         # -----------------------------------------
         # 确保在加载新宠物配置前，旧宠物的后台任务已停止
+        self.main_window.pet_counts[self.curr_pet_name] -= 1
+        self.main_window.update_controls(self.curr_pet_name)
         self.stop_thread('Animation')  # 停止动画线程
         self.stop_thread('Interaction')  # 停止交互线程
         self.stop_thread('Scheduler')  # 停止计划线程
@@ -694,6 +697,9 @@ class PetWidget(QWidget):
         self.runAnimation()
         self.runInteraction()
         self.runScheduler()
+
+        self.main_window.pet_counts[self.curr_pet_name] += 1
+        self.main_window.update_controls(self.curr_pet_name)
 
         # 步骤 5: 更新 UI 元素以匹配新宠物
         if hasattr(self, '_setup_ui') and callable(getattr(self, '_setup_ui')):
