@@ -167,7 +167,7 @@ class MainWindow(QMainWindow):
 
 	def add_pet(self, pet_type):
 		# 实际创建桌宠逻辑，根据项目实现补充
-		self.pet_instances.append(petal.create_pet_widget('data/pets.json', pet_type))
+		self.pet_instances.append(petal.create_pet_widget('data/pets.json', pet_type, main_window = self))
 		self.pet_counts[pet_type] += 1
 		self.update_controls(pet_type)
 

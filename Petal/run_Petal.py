@@ -76,7 +76,7 @@ STYLE_SHEET = '''
 }
 '''
 
-def create_pet_widget(pets_json_path, curr_pet_name: str = ''):
+def create_pet_widget(pets_json_path, curr_pet_name: str = '', main_window = None):
     try:
         pets_data = read_json(pets_json_path)
         print(f"{pets_json_path} 加载成功。")
@@ -84,7 +84,7 @@ def create_pet_widget(pets_json_path, curr_pet_name: str = ''):
         print(f"{pets_json_path} 加载失败: {e}")
         return None
 
-    pet = PetWidget(pets=pets_data, curr_pet_name = curr_pet_name)
+    pet = PetWidget(pets=pets_data, curr_pet_name = curr_pet_name, main_window = main_window)
     pet.show()
     print(f"{pets_json_path} 宠物窗口创建完成。")
     return pet
