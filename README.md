@@ -36,6 +36,16 @@
     git clone https://github.com/Hsch22/Petaler.git 
     cd Petaler
     ```
+    
+    ⚠️ **重要**: 请确保你在 **master** 分支上，这是稳定的生产分支：
+    ```bash
+    git checkout master
+    git pull origin master
+    ```
+    
+    📋 **分支说明**:
+    *   `master`: 稳定的生产分支，推荐用于正常使用
+    *   `wip`，`wip2`: 开发和测试分支，包含正在开发中的新功能，用于功能测试和实验性修改
 
 2.  **环境配置**:
     *   确保你已安装 Python。项目代码中使用了 f-string、类型提示等特性，推荐 **Python 3.10.16**。
